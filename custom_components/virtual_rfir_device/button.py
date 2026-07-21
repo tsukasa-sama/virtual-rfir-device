@@ -1,4 +1,4 @@
-"""Button platform: one button entity per stored IR/RF command."""
+"""Button platform: one button entity per configured button."""
 
 from __future__ import annotations
 
@@ -11,8 +11,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_CODE, CONF_COMMANDS, CONF_ICON, CONF_ID, CONF_REMOTE, DOMAIN
-from .helpers import async_send_code
+from .const import (
+    CONF_BUTTONS,
+    CONF_CODE_ID,
+    CONF_CODES,
+    CONF_ICON,
+    CONF_ID,
+    CONF_REMOTE,
+    DOMAIN,
+)
+from .helpers import async_send_code, resolve_code
 
 
 async def async_setup_entry(
@@ -20,10 +28,11 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create a button entity for each command in the entry options."""
-    commands = entry.options.get(CONF_COMMANDS, [])
+    """Create a button entity for each configured button."""
+    codes = entry.options.get(CONF_CODES, [])
+    buttons = entry.options.get(CONF_BUTTONS, [])
     async_add_entities(
-        VirtualRfirButton(entry, command) for command in commands
+        VirtualRfirButton(entry, button, codes) for button in buttons
     )
 
 
@@ -32,18 +41,24 @@ class VirtualRfirButton(ButtonEntity):
 
     _attr_has_entity_name = True
 
-    def __init__(self, entry: ConfigEntry, command: dict[str, Any]) -> None:
-        """Initialize the button from a stored command definition."""
+    def __init__(
+        self,
+        entry: ConfigEntry,
+        button: dict[str, Any],
+        codes: list[dict[str, Any]],
+    ) -> None:
+        """Initialize the button from a stored button definition."""
         self._remote_entity_id: str = entry.data[CONF_REMOTE]
-        self._code: str = command[CONF_CODE]
-        self._attr_name = command[CONF_NAME]
-        self._attr_icon = command.get(CONF_ICON)
-        self._attr_unique_id = f"{entry.entry_id}_{command[CONF_ID]}"
+        self._code = resolve_code(codes, button.get(CONF_CODE_ID))
+        self._attr_name = button[CONF_NAME]
+        self._attr_icon = button.get(CONF_ICON)
+        self._attr_unique_id = f"{entry.entry_id}_button_{button[CONF_ID]}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.data[CONF_NAME],
         )
 
     async def async_press(self) -> None:
-        """Transmit the stored code through the configured remote."""
-        await async_send_code(self.hass, self._remote_entity_id, self._code)
+        """Transmit the referenced code through the configured remote."""
+        if self._code is not None:
+            await async_send_code(self.hass, self._remote_entity_id, self._code)

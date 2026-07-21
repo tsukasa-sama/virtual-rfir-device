@@ -22,49 +22,71 @@
     "step": {
       "init": {
         "title": "Manage device",
-        "description": "Add or remove the commands (buttons) and switches for this device.",
+        "description": "Codes are your IR/RF code library. Buttons and switches are the controls, composed from codes.",
         "menu_options": {
-          "add_command": "Add command",
-          "remove_command": "Remove command",
+          "add_code": "Add code",
+          "remove_code": "Remove code",
+          "add_button": "Add button",
+          "remove_button": "Remove button",
           "add_switch": "Add switch",
           "remove_switch": "Remove switch",
           "finish": "Done"
         }
       },
-      "add_command": {
-        "title": "Add command",
-        "description": "Each command becomes a button on this device.",
+      "add_code": {
+        "title": "Add code",
+        "description": "Store an IR/RF code in the library. This creates no control on its own — add a button or switch to use it.",
         "data": {
           "name": "Name",
-          "icon": "Icon",
           "code": "IR/RF code"
         },
         "data_description": {
-          "name": "Button name (e.g. Power, Brightness Up, Flicker).",
-          "icon": "Optional icon for the button (e.g. mdi:fireplace).",
+          "name": "Name for this code (e.g. Power, Flicker, Brightness Up).",
           "code": "The IR/RF code to transmit. Paste the raw Base64 code; a 'b64:' prefix is added automatically if missing."
         }
       },
-      "remove_command": {
-        "title": "Remove commands",
+      "remove_code": {
+        "title": "Remove codes",
         "data": {
-          "commands": "Commands to remove"
+          "codes": "Codes to remove"
+        }
+      },
+      "add_button": {
+        "title": "Add button",
+        "description": "Create a button control. Pick an existing code, or paste a new code to add it to the library at the same time.",
+        "data": {
+          "name": "Name",
+          "icon": "Icon",
+          "code_id": "Existing code",
+          "code": "New code"
+        },
+        "data_description": {
+          "name": "Button name (e.g. Flicker, Brightness Up).",
+          "icon": "Optional icon for the button (e.g. mdi:fire).",
+          "code_id": "Use a code already in the library.",
+          "code": "Or paste a new Base64 code to create and use it. Leave blank if you picked an existing code."
+        }
+      },
+      "remove_button": {
+        "title": "Remove buttons",
+        "data": {
+          "buttons": "Buttons to remove"
         }
       },
       "add_switch": {
         "title": "Add switch",
-        "description": "Create an on/off switch from existing commands. For a toggle-only appliance, pick the same command for both on and off.",
+        "description": "Create an on/off switch from codes in the library. For a toggle-only appliance, pick the same code for both on and off.",
         "data": {
           "name": "Name",
           "icon": "Icon",
-          "on_command": "On command",
-          "off_command": "Off command"
+          "on_code": "On code",
+          "off_code": "Off code"
         },
         "data_description": {
           "name": "Switch name (e.g. Power).",
           "icon": "Optional icon for the switch (e.g. mdi:fireplace).",
-          "on_command": "Command sent when the switch is turned on.",
-          "off_command": "Command sent when the switch is turned off."
+          "on_code": "Code sent when the switch is turned on.",
+          "off_code": "Code sent when the switch is turned off."
         }
       },
       "remove_switch": {
@@ -76,7 +98,8 @@
     },
     "error": {
       "name_required": "A name is required.",
-      "code_required": "An IR/RF code is required."
+      "code_required": "An IR/RF code is required.",
+      "choose_one_code": "Pick an existing code or paste a new one, not both."
     }
   }
 }

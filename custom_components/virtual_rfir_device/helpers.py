@@ -35,18 +35,18 @@ async def async_send_code(
     )
 
 
-def commands_by_id(commands: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Index a list of command definitions by their id."""
-    return {command[CONF_ID]: command for command in commands}
+def codes_by_id(codes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Index a list of code-library entries by their id."""
+    return {code[CONF_ID]: code for code in codes}
 
 
-def code_for_command(
-    commands: list[dict[str, Any]], command_id: str | None
+def resolve_code(
+    codes: list[dict[str, Any]], code_id: str | None
 ) -> str | None:
-    """Return the code for a referenced command id, or ``None`` if missing."""
-    if command_id is None:
+    """Return the Base64 string for a referenced code id, or ``None``."""
+    if code_id is None:
         return None
-    command = commands_by_id(commands).get(command_id)
-    if command is None:
+    entry = codes_by_id(codes).get(code_id)
+    if entry is None:
         return None
-    return command.get(CONF_CODE)
+    return entry.get(CONF_CODE)

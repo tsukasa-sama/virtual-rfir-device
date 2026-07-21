@@ -13,15 +13,18 @@ becomes a first-class virtual device.
 
 Early development. Current capability:
 
-- **v0.1** — Config flow to create a named virtual device bound to an IR/RF
-  `remote` entity. The device appears under **Settings → Devices & services →
-  Devices**, linked to the transmitter it's "connected through".
+- Config flow to create a named virtual device bound to an IR/RF `remote`
+  entity. The device appears under **Settings → Devices & services → Devices**,
+  linked to the transmitter it's "connected through".
+- Options flow (the device's **Configure** screen) to manage its contents:
+  - **Codes** — a library of named IR/RF codes. Data only; creates no entity.
+  - **Buttons** — stateless button entities that each send one code.
+  - **Switches** — optimistic (assumed-state) on/off switches built from codes.
+    Pick the same code for both directions for a toggle-only appliance.
 
 Planned next:
 
-- Button controls (one entity per stored command).
-- Composite semantic entities (switch, select, number, fan, ...) that bind
-  commands to Home Assistant roles.
+- Additional composite entity types (select, number, fan, ...).
 
 ## Installation (HACS)
 
@@ -33,10 +36,10 @@ Planned next:
 
 ## Design
 
-An IR/RF device is a flat bag of named commands, while Home Assistant wants
-semantic, stateful entities. This integration resolves that with a two-layer
-model:
+An IR/RF device is a flat bag of named codes, while Home Assistant wants
+semantic, stateful entities. This integration separates the two concerns:
 
-1. **Every command is a button** — a universal, zero-config baseline.
-2. **Optional composite entities** — switch / select / number / fan / etc. that
-   bind command names to entity roles.
+1. **Codes** are the raw material — a named library of IR/RF codes, no entities.
+2. **Entities** (buttons, switches, and later select / number / fan / ...) are
+   composed by referencing codes. Nothing appears on the device until you add
+   one, so codes are never silently duplicated as controls.

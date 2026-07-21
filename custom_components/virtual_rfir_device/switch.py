@@ -1,4 +1,4 @@
-"""Switch platform: optimistic on/off switches built from IR/RF commands.
+"""Switch platform: optimistic on/off switches built from IR/RF codes.
 
 Because IR/RF devices don't report their real state, these switches are
 assumed-state: Home Assistant shows separate on/off buttons and only remembers
@@ -19,16 +19,16 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
-    CONF_COMMANDS,
+    CONF_CODES,
     CONF_ICON,
     CONF_ID,
-    CONF_OFF_COMMAND,
-    CONF_ON_COMMAND,
+    CONF_OFF_CODE,
+    CONF_ON_CODE,
     CONF_REMOTE,
     CONF_SWITCHES,
     DOMAIN,
 )
-from .helpers import async_send_code, code_for_command
+from .helpers import async_send_code, resolve_code
 
 
 async def async_setup_entry(
@@ -36,11 +36,11 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create a switch entity for each switch defined in the entry options."""
-    commands = entry.options.get(CONF_COMMANDS, [])
+    """Create a switch entity for each configured switch."""
+    codes = entry.options.get(CONF_CODES, [])
     switches = entry.options.get(CONF_SWITCHES, [])
     async_add_entities(
-        VirtualRfirSwitch(entry, switch, commands) for switch in switches
+        VirtualRfirSwitch(entry, switch, codes) for switch in switches
     )
 
 
@@ -54,12 +54,12 @@ class VirtualRfirSwitch(SwitchEntity, RestoreEntity):
         self,
         entry: ConfigEntry,
         switch: dict[str, Any],
-        commands: list[dict[str, Any]],
+        codes: list[dict[str, Any]],
     ) -> None:
         """Initialize the switch from a stored switch definition."""
         self._remote_entity_id: str = entry.data[CONF_REMOTE]
-        self._on_code = code_for_command(commands, switch.get(CONF_ON_COMMAND))
-        self._off_code = code_for_command(commands, switch.get(CONF_OFF_COMMAND))
+        self._on_code = resolve_code(codes, switch.get(CONF_ON_CODE))
+        self._off_code = resolve_code(codes, switch.get(CONF_OFF_CODE))
         self._attr_name = switch[CONF_NAME]
         self._attr_icon = switch.get(CONF_ICON)
         self._attr_unique_id = f"{entry.entry_id}_switch_{switch[CONF_ID]}"

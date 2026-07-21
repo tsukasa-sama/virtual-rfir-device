@@ -7,18 +7,24 @@ DOMAIN = "virtual_rfir_device"
 # Config entry data keys
 CONF_REMOTE = "remote"
 
-# Options keys
-CONF_COMMANDS = "commands"
+# Options keys (top-level lists)
+CONF_CODES = "codes"
+CONF_BUTTONS = "buttons"
 CONF_SWITCHES = "switches"
 
-# Per-command keys
+# Shared item keys
 CONF_ID = "id"
 CONF_ICON = "icon"
+
+# Code-library entry keys
 CONF_CODE = "code"
 
-# Per-switch keys
-CONF_ON_COMMAND = "on_command"
-CONF_OFF_COMMAND = "off_command"
+# Button entry keys
+CONF_CODE_ID = "code_id"
+
+# Switch entry keys
+CONF_ON_CODE = "on_code"
+CONF_OFF_CODE = "off_code"
 
 # Device metadata
 MANUFACTURER = "Virtual RF/IR"
