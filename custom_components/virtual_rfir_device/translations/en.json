@@ -63,6 +63,14 @@
           "id": "Code to edit"
         }
       },
+      "manage_code": {
+        "title": "Edit code",
+        "description": "Edit this code, or choose Done to go back.",
+        "menu_options": {
+          "edit_code_details": "Edit name and code",
+          "done_edit": "Done"
+        }
+      },
       "edit_code_details": {
         "title": "Edit code",
         "data": {
@@ -98,6 +106,14 @@
         "title": "Edit button",
         "data": {
           "id": "Button to edit"
+        }
+      },
+      "manage_button": {
+        "title": "Edit button",
+        "description": "Edit this button, or choose Done to go back.",
+        "menu_options": {
+          "edit_button_details": "Edit name, icon, and code",
+          "done_edit": "Done"
         }
       },
       "edit_button_details": {
@@ -139,6 +155,14 @@
         "title": "Edit switch",
         "data": {
           "id": "Switch to edit"
+        }
+      },
+      "manage_switch": {
+        "title": "Edit switch",
+        "description": "Edit this switch, or choose Done to go back.",
+        "menu_options": {
+          "edit_switch_details": "Edit name, icon, and codes",
+          "done_edit": "Done"
         }
       },
       "edit_switch_details": {
@@ -188,13 +212,14 @@
           "off_code": "Code sent to turn the light off."
         }
       },
-      "light_levels": {
-        "title": "Brightness levels",
-        "description": "Add a code for each brightness level (e.g. the 70% code at 70). The slider snaps to the nearest level. Choose Done when finished.",
+      "manage_light": {
+        "title": "Edit light",
+        "description": "Edit the power codes or brightness levels. The slider snaps to the nearest level. Choose Done when finished.",
         "menu_options": {
+          "edit_light_details": "Edit power codes",
           "add_level": "Add brightness level",
           "remove_level": "Remove brightness level",
-          "done_light": "Done"
+          "done_edit": "Done"
         }
       },
       "add_level": {

@@ -243,13 +243,13 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_edit_code(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Choose a code to edit."""
+        """Choose a code to edit, then open its hub."""
         self._load()
         assert self._codes is not None
 
         if user_input is not None:
             self._edit_id = user_input[CONF_ID]
-            return await self.async_step_edit_code_details()
+            return await self.async_step_manage_code()
 
         schema = vol.Schema(
             {
@@ -259,6 +259,17 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             }
         )
         return self.async_show_form(step_id="edit_code", data_schema=schema)
+
+    async def async_step_manage_code(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Hub for the selected code."""
+        if _find_by_id(self._codes or [], self._edit_id) is None:
+            return await self.async_step_init()
+        return self.async_show_menu(
+            step_id="manage_code",
+            menu_options=["edit_code_details", "done_edit"],
+        )
 
     async def async_step_edit_code_details(
         self, user_input: dict[str, Any] | None = None
@@ -281,8 +292,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             else:
                 code[CONF_NAME] = name
                 code[CONF_CODE] = value
-                self._edit_id = None
-                return await self.async_step_init()
+                return await self.async_step_manage_code()
 
         schema = vol.Schema(
             {
@@ -371,13 +381,13 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_edit_button(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Choose a button to edit."""
+        """Choose a button to edit, then open its hub."""
         self._load()
         assert self._buttons is not None
 
         if user_input is not None:
             self._edit_id = user_input[CONF_ID]
-            return await self.async_step_edit_button_details()
+            return await self.async_step_manage_button()
 
         schema = vol.Schema(
             {
@@ -387,6 +397,17 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             }
         )
         return self.async_show_form(step_id="edit_button", data_schema=schema)
+
+    async def async_step_manage_button(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Hub for the selected button."""
+        if _find_by_id(self._buttons or [], self._edit_id) is None:
+            return await self.async_step_init()
+        return self.async_show_menu(
+            step_id="manage_button",
+            menu_options=["edit_button_details", "done_edit"],
+        )
 
     async def async_step_edit_button_details(
         self, user_input: dict[str, Any] | None = None
@@ -408,8 +429,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                 button[CONF_NAME] = name
                 button[CONF_CODE_ID] = user_input[CONF_CODE_ID]
                 _set_optional(button, CONF_ICON, user_input.get(CONF_ICON))
-                self._edit_id = None
-                return await self.async_step_init()
+                return await self.async_step_manage_button()
 
         schema = vol.Schema(
             {
@@ -506,13 +526,13 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_edit_switch(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Choose a switch to edit."""
+        """Choose a switch to edit, then open its hub."""
         self._load()
         assert self._switches is not None
 
         if user_input is not None:
             self._edit_id = user_input[CONF_ID]
-            return await self.async_step_edit_switch_details()
+            return await self.async_step_manage_switch()
 
         schema = vol.Schema(
             {
@@ -522,6 +542,17 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             }
         )
         return self.async_show_form(step_id="edit_switch", data_schema=schema)
+
+    async def async_step_manage_switch(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Hub for the selected switch."""
+        if _find_by_id(self._switches or [], self._edit_id) is None:
+            return await self.async_step_init()
+        return self.async_show_menu(
+            step_id="manage_switch",
+            menu_options=["edit_switch_details", "done_edit"],
+        )
 
     async def async_step_edit_switch_details(
         self, user_input: dict[str, Any] | None = None
@@ -544,8 +575,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                 switch[CONF_ON_CODE] = user_input[CONF_ON_CODE]
                 switch[CONF_OFF_CODE] = user_input[CONF_OFF_CODE]
                 _set_optional(switch, CONF_ICON, user_input.get(CONF_ICON))
-                self._edit_id = None
-                return await self.async_step_init()
+                return await self.async_step_manage_switch()
 
         code_select = selector.SelectSelector(
             selector.SelectSelectorConfig(options=self._code_options())
@@ -615,7 +645,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                     light[CONF_ICON] = icon
                 self._lights.append(light)
                 self._edit_id = light[CONF_ID]
-                return await self.async_step_light_levels()
+                return await self.async_step_manage_light()
 
         return self.async_show_form(
             step_id="add_light",
@@ -625,19 +655,19 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             errors=errors,
         )
 
-    async def async_step_light_levels(
+    async def async_step_manage_light(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Menu for managing the current light's brightness levels."""
+        """Hub for the selected light: power codes and brightness levels."""
         light = self._current_light()
         if light is None:
             return await self.async_step_init()
 
-        menu_options = ["add_level"]
+        menu_options = ["edit_light_details", "add_level"]
         if light.get(CONF_LEVELS):
             menu_options.append("remove_level")
-        menu_options.append("done_light")
-        return self.async_show_menu(step_id="light_levels", menu_options=menu_options)
+        menu_options.append("done_edit")
+        return self.async_show_menu(step_id="manage_light", menu_options=menu_options)
 
     async def async_step_add_level(
         self, user_input: dict[str, Any] | None = None
@@ -657,7 +687,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                     CONF_PERCENT: int(user_input[CONF_PERCENT]),
                 }
             )
-            return await self.async_step_light_levels()
+            return await self.async_step_manage_light()
 
         schema = vol.Schema(
             {
@@ -690,7 +720,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                 for level in light[CONF_LEVELS]
                 if level[CONF_ID] not in to_remove
             ]
-            return await self.async_step_light_levels()
+            return await self.async_step_manage_light()
 
         options = [
             selector.SelectOptionDict(
@@ -712,23 +742,16 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         )
         return self.async_show_form(step_id="remove_level", data_schema=schema)
 
-    async def async_step_done_light(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Finish editing the current light and return to the main menu."""
-        self._edit_id = None
-        return await self.async_step_init()
-
     async def async_step_edit_light(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Choose a light to edit."""
+        """Choose a light to edit, then open its hub."""
         self._load()
         assert self._lights is not None
 
         if user_input is not None:
             self._edit_id = user_input[CONF_ID]
-            return await self.async_step_edit_light_details()
+            return await self.async_step_manage_light()
 
         schema = vol.Schema(
             {
@@ -742,7 +765,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_edit_light_details(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Edit the light's power codes, then its brightness levels."""
+        """Edit the light's power codes."""
         self._load()
         assert self._codes is not None
         light = self._current_light()
@@ -759,7 +782,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                 light[CONF_ON_CODE] = user_input[CONF_ON_CODE]
                 light[CONF_OFF_CODE] = user_input[CONF_OFF_CODE]
                 _set_optional(light, CONF_ICON, user_input.get(CONF_ICON))
-                return await self.async_step_light_levels()
+                return await self.async_step_manage_light()
 
         return self.async_show_form(
             step_id="edit_light_details",
@@ -796,6 +819,15 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             }
         )
         return self.async_show_form(step_id="remove_light", data_schema=schema)
+
+    # --- Shared navigation -------------------------------------------------
+
+    async def async_step_done_edit(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Leave an item's edit hub and return to the main menu."""
+        self._edit_id = None
+        return await self.async_step_init()
 
     # --- Finish ------------------------------------------------------------
 
