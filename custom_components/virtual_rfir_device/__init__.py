@@ -16,7 +16,7 @@ from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_REMOTE, DOMAIN, MANUFACTURER
 
-PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.SWITCH]
+PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.SWITCH, Platform.LIGHT]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

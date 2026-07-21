@@ -21,6 +21,9 @@ Early development. Current capability:
   - **Buttons** — stateless button entities that each send one code.
   - **Switches** — optimistic (assumed-state) on/off switches built from codes.
     Pick the same code for both directions for a toggle-only appliance.
+  - **Lights** — optimistic dimmable lights. Power is an on/off (or toggle)
+    code; brightness is a set of absolute-level codes (e.g. 10%…100%). The
+    brightness slider snaps to the nearest configured level.
 
 Planned next:
 

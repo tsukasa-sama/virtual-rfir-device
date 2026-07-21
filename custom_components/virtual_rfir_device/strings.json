@@ -25,11 +25,17 @@
         "description": "Codes are your IR/RF code library. Buttons and switches are the controls, composed from codes.",
         "menu_options": {
           "add_code": "Add code",
+          "edit_code": "Edit code",
           "remove_code": "Remove code",
           "add_button": "Add button",
+          "edit_button": "Edit button",
           "remove_button": "Remove button",
           "add_switch": "Add switch",
+          "edit_switch": "Edit switch",
           "remove_switch": "Remove switch",
+          "add_light": "Add light",
+          "edit_light": "Edit light",
+          "remove_light": "Remove light",
           "finish": "Done"
         }
       },
@@ -49,6 +55,23 @@
         "title": "Remove codes",
         "data": {
           "codes": "Codes to remove"
+        }
+      },
+      "edit_code": {
+        "title": "Edit code",
+        "data": {
+          "id": "Code to edit"
+        }
+      },
+      "edit_code_details": {
+        "title": "Edit code",
+        "data": {
+          "name": "Name",
+          "code": "IR/RF code"
+        },
+        "data_description": {
+          "name": "Name for this code (e.g. Power, Flicker, Brightness Up).",
+          "code": "The IR/RF code to transmit. Paste the raw Base64 code; a 'b64:' prefix is added automatically if missing."
         }
       },
       "add_button": {
@@ -71,6 +94,25 @@
           "buttons": "Buttons to remove"
         }
       },
+      "edit_button": {
+        "title": "Edit button",
+        "data": {
+          "id": "Button to edit"
+        }
+      },
+      "edit_button_details": {
+        "title": "Edit button",
+        "data": {
+          "name": "Name",
+          "icon": "Icon",
+          "code_id": "Code"
+        },
+        "data_description": {
+          "name": "Button name (e.g. Flicker, Brightness Up).",
+          "icon": "Optional icon for the button (e.g. mdi:fire).",
+          "code_id": "The code this button sends."
+        }
+      },
       "add_switch": {
         "title": "Add switch",
         "description": "Create an on/off switch from codes in the library. For a toggle-only appliance, pick the same code for both on and off.",
@@ -91,6 +133,97 @@
         "title": "Remove switches",
         "data": {
           "switches": "Switches to remove"
+        }
+      },
+      "edit_switch": {
+        "title": "Edit switch",
+        "data": {
+          "id": "Switch to edit"
+        }
+      },
+      "edit_switch_details": {
+        "title": "Edit switch",
+        "data": {
+          "name": "Name",
+          "icon": "Icon",
+          "on_code": "On code",
+          "off_code": "Off code"
+        },
+        "data_description": {
+          "name": "Switch name (e.g. Power).",
+          "icon": "Optional icon for the switch (e.g. mdi:fireplace).",
+          "on_code": "Code sent when the switch is turned on.",
+          "off_code": "Code sent when the switch is turned off."
+        }
+      },
+      "add_light": {
+        "title": "Add light — power",
+        "description": "Set the power codes. For a toggle-only appliance, pick the same code for on and off. Next you'll add brightness levels.",
+        "data": {
+          "name": "Name",
+          "icon": "Icon",
+          "on_code": "On code",
+          "off_code": "Off code"
+        },
+        "data_description": {
+          "name": "Light name (e.g. Counter Lights).",
+          "icon": "Optional icon for the light.",
+          "on_code": "Code sent to turn the light on.",
+          "off_code": "Code sent to turn the light off."
+        }
+      },
+      "edit_light_details": {
+        "title": "Edit light — power",
+        "description": "Update the power codes. Next you'll manage brightness levels.",
+        "data": {
+          "name": "Name",
+          "icon": "Icon",
+          "on_code": "On code",
+          "off_code": "Off code"
+        },
+        "data_description": {
+          "name": "Light name (e.g. Counter Lights).",
+          "icon": "Optional icon for the light.",
+          "on_code": "Code sent to turn the light on.",
+          "off_code": "Code sent to turn the light off."
+        }
+      },
+      "light_levels": {
+        "title": "Brightness levels",
+        "description": "Add a code for each brightness level (e.g. the 70% code at 70). The slider snaps to the nearest level. Choose Done when finished.",
+        "menu_options": {
+          "add_level": "Add brightness level",
+          "remove_level": "Remove brightness level",
+          "done_light": "Done"
+        }
+      },
+      "add_level": {
+        "title": "Add brightness level",
+        "data": {
+          "code_id": "Code",
+          "percent": "Brightness %"
+        },
+        "data_description": {
+          "code_id": "The code that sets this brightness level.",
+          "percent": "The brightness this code represents (1-100)."
+        }
+      },
+      "remove_level": {
+        "title": "Remove brightness levels",
+        "data": {
+          "levels": "Levels to remove"
+        }
+      },
+      "edit_light": {
+        "title": "Edit light",
+        "data": {
+          "id": "Light to edit"
+        }
+      },
+      "remove_light": {
+        "title": "Remove lights",
+        "data": {
+          "lights": "Lights to remove"
         }
       }
     },
