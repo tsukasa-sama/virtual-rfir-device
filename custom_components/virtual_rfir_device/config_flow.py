@@ -231,7 +231,9 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             {
                 vol.Required(CONF_CODES): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=self._code_options(), multiple=True
+                        options=self._code_options(),
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
                     )
                 )
             }
@@ -357,7 +359,9 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             {
                 vol.Required(CONF_BUTTONS): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=_as_options(self._buttons), multiple=True
+                        options=_as_options(self._buttons),
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
                     )
                 )
             }
@@ -490,7 +494,9 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             {
                 vol.Required(CONF_SWITCHES): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=_as_options(self._switches), multiple=True
+                        options=_as_options(self._switches),
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
                     )
                 )
             }
@@ -696,7 +702,11 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Required(CONF_LEVELS): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=options, multiple=True)
+                    selector.SelectSelectorConfig(
+                        options=options,
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
                 )
             }
         )
@@ -778,7 +788,9 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             {
                 vol.Required(CONF_LIGHTS): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=_as_options(self._lights), multiple=True
+                        options=_as_options(self._lights),
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
                     )
                 )
             }
