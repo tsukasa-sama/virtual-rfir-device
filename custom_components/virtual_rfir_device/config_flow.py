@@ -197,36 +197,10 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
 
     # --- Buttons -----------------------------------------------------------
 
-    def _resolve_button_code(
-        self, name: str, new_code: str, selected: str | None
-    ) -> tuple[str | None, str | None]:
-        """Resolve a button's code source to a code id.
-
-        Returns ``(code_id, error_key)``. Exactly one of a pasted code or a
-        selected existing code must be provided; a pasted code is added to the
-        library inline.
-        """
-        if new_code and selected:
-            return None, "choose_one_code"
-        if not new_code and not selected:
-            return None, "code_required"
-        if new_code:
-            assert self._codes is not None
-            code_id = uuid.uuid4().hex
-            self._codes.append(
-                {CONF_ID: code_id, CONF_NAME: name, CONF_CODE: new_code}
-            )
-            return code_id, None
-        return selected, None
-
     async def async_step_add_button(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Add a button entity, referencing an existing code or a new one.
-
-        Paste a code to create a new library entry inline, or pick one that
-        already exists.
-        """
+        """Add a button entity that sends a code from the library."""
         self._load()
         assert self._codes is not None
         assert self._buttons is not None
@@ -234,43 +208,31 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
 
         if user_input is not None:
             name = user_input[CONF_NAME].strip()
-            new_code = user_input.get(CONF_CODE, "").strip()
-            selected = user_input.get(CONF_CODE_ID)
-
             if not name:
                 errors[CONF_NAME] = "name_required"
             else:
-                code_id, error = self._resolve_button_code(name, new_code, selected)
-                if error:
-                    errors[CONF_CODE] = error
-                else:
-                    button = {
-                        CONF_ID: uuid.uuid4().hex,
-                        CONF_NAME: name,
-                        CONF_CODE_ID: code_id,
-                    }
-                    if icon := user_input.get(CONF_ICON):
-                        button[CONF_ICON] = icon
-                    self._buttons.append(button)
-                    return await self.async_step_init()
+                button = {
+                    CONF_ID: uuid.uuid4().hex,
+                    CONF_NAME: name,
+                    CONF_CODE_ID: user_input[CONF_CODE_ID],
+                }
+                if icon := user_input.get(CONF_ICON):
+                    button[CONF_ICON] = icon
+                self._buttons.append(button)
+                return await self.async_step_init()
 
-        fields: dict[Any, Any] = {
-            vol.Required(CONF_NAME): selector.TextSelector(),
-            vol.Optional(CONF_ICON): selector.IconSelector(),
-        }
-        if self._codes:
-            fields[vol.Optional(CONF_CODE_ID)] = selector.SelectSelector(
-                selector.SelectSelectorConfig(options=self._code_options())
-            )
-        fields[vol.Optional(CONF_CODE)] = selector.TextSelector(
-            selector.TextSelectorConfig(multiline=True)
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): selector.TextSelector(),
+                vol.Optional(CONF_ICON): selector.IconSelector(),
+                vol.Required(CONF_CODE_ID): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=self._code_options())
+                ),
+            }
         )
-
         return self.async_show_form(
             step_id="add_button",
-            data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(fields), user_input
-            ),
+            data_schema=self.add_suggested_values_to_schema(schema, user_input),
             errors=errors,
         )
 

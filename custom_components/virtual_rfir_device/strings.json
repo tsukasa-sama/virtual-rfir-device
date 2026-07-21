@@ -53,18 +53,16 @@
       },
       "add_button": {
         "title": "Add button",
-        "description": "Create a button control. Pick an existing code, or paste a new code to add it to the library at the same time.",
+        "description": "Create a button control that sends a code from the library.",
         "data": {
           "name": "Name",
           "icon": "Icon",
-          "code_id": "Existing code",
-          "code": "New code"
+          "code_id": "Code"
         },
         "data_description": {
           "name": "Button name (e.g. Flicker, Brightness Up).",
           "icon": "Optional icon for the button (e.g. mdi:fire).",
-          "code_id": "Use a code already in the library.",
-          "code": "Or paste a new Base64 code to create and use it. Leave blank if you picked an existing code."
+          "code_id": "The code this button sends."
         }
       },
       "remove_button": {
@@ -98,8 +96,7 @@
     },
     "error": {
       "name_required": "A name is required.",
-      "code_required": "An IR/RF code is required.",
-      "choose_one_code": "Pick an existing code or paste a new one, not both."
+      "code_required": "An IR/RF code is required."
     }
   }
 }
