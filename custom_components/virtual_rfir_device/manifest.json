@@ -1,0 +1,12 @@
+{
+  "domain": "virtual_rfir_device",
+  "name": "Virtual RF/IR Device",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["remote"],
+  "documentation": "https://github.com/travisphillips/virtual-rfir-device",
+  "integration_type": "device",
+  "iot_class": "assumed_state",
+  "requirements": [],
+  "version": "0.1.0"
+}
