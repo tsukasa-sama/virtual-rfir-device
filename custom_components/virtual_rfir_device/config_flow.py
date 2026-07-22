@@ -19,18 +19,26 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_BUTTONS,
+    CONF_CLIMATES,
     CONF_CODE,
     CONF_CODE_ID,
     CONF_CODES,
+    CONF_DOWN_CODE,
     CONF_ICON,
     CONF_ID,
     CONF_LEVELS,
     CONF_LIGHTS,
+    CONF_MAX_TEMP,
+    CONF_MIN_TEMP,
     CONF_OFF_CODE,
     CONF_ON_CODE,
     CONF_PERCENT,
     CONF_REMOTE,
     CONF_SWITCHES,
+    CONF_TARGET_TEMP,
+    CONF_TEMP_SENSOR,
+    CONF_TEMP_STEP,
+    CONF_UP_CODE,
     DOMAIN,
 )
 
@@ -118,6 +126,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         self._buttons: list[dict[str, Any]] | None = None
         self._switches: list[dict[str, Any]] | None = None
         self._lights: list[dict[str, Any]] | None = None
+        self._climates: list[dict[str, Any]] | None = None
         # Id of the item currently being edited (set by an edit-select step),
         # also used as the "current light" while editing its brightness levels.
         self._edit_id: str | None = None
@@ -137,6 +146,8 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                 {**item, CONF_LEVELS: [dict(lvl) for lvl in item.get(CONF_LEVELS, [])]}
                 for item in options.get(CONF_LIGHTS, [])
             ]
+        if self._climates is None:
+            self._climates = [dict(item) for item in options.get(CONF_CLIMATES, [])]
 
     def _code_options(self) -> list[selector.SelectOptionDict]:
         """Return the code library as select options."""
@@ -173,6 +184,10 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             menu_options.append("add_light")
         if self._lights:
             menu_options += ["edit_light", "remove_light"]
+        if self._codes:
+            menu_options.append("add_climate")
+        if self._climates:
+            menu_options += ["edit_climate", "remove_climate"]
         menu_options.append("finish")
         return self.async_show_menu(step_id="init", menu_options=menu_options)
 
@@ -820,6 +835,186 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         )
         return self.async_show_form(step_id="remove_light", data_schema=schema)
 
+    # --- Climate -----------------------------------------------------------
+
+    def _climate_schema(self) -> vol.Schema:
+        """Return the schema for a climate's codes and temperature range."""
+        code_select = selector.SelectSelector(
+            selector.SelectSelectorConfig(options=self._code_options())
+        )
+        temp_number = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0, max=200, step=0.5, mode=selector.NumberSelectorMode.BOX
+            )
+        )
+        return vol.Schema(
+            {
+                vol.Required(CONF_NAME): selector.TextSelector(),
+                vol.Optional(CONF_ICON): selector.IconSelector(),
+                vol.Required(CONF_ON_CODE): code_select,
+                vol.Required(CONF_OFF_CODE): code_select,
+                vol.Required(CONF_UP_CODE): code_select,
+                vol.Required(CONF_DOWN_CODE): code_select,
+                vol.Required(CONF_MIN_TEMP, default=60): temp_number,
+                vol.Required(CONF_MAX_TEMP, default=80): temp_number,
+                vol.Required(CONF_TEMP_STEP, default=1): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0.1, max=10, step=0.1, mode=selector.NumberSelectorMode.BOX
+                    )
+                ),
+                vol.Optional(CONF_TARGET_TEMP): temp_number,
+                vol.Optional(CONF_TEMP_SENSOR): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="sensor", device_class="temperature"
+                    )
+                ),
+            }
+        )
+
+    def _build_climate(
+        self, user_input: dict[str, Any], climate: dict[str, Any]
+    ) -> None:
+        """Write validated climate fields from user input into a climate dict."""
+        climate[CONF_NAME] = user_input[CONF_NAME].strip()
+        climate[CONF_ON_CODE] = user_input[CONF_ON_CODE]
+        climate[CONF_OFF_CODE] = user_input[CONF_OFF_CODE]
+        climate[CONF_UP_CODE] = user_input[CONF_UP_CODE]
+        climate[CONF_DOWN_CODE] = user_input[CONF_DOWN_CODE]
+        climate[CONF_MIN_TEMP] = float(user_input[CONF_MIN_TEMP])
+        climate[CONF_MAX_TEMP] = float(user_input[CONF_MAX_TEMP])
+        climate[CONF_TEMP_STEP] = float(user_input[CONF_TEMP_STEP])
+        _set_optional(climate, CONF_ICON, user_input.get(CONF_ICON))
+        _set_optional(climate, CONF_TEMP_SENSOR, user_input.get(CONF_TEMP_SENSOR))
+        if (target := user_input.get(CONF_TARGET_TEMP)) is not None:
+            climate[CONF_TARGET_TEMP] = float(target)
+        else:
+            climate.pop(CONF_TARGET_TEMP, None)
+
+    @staticmethod
+    def _validate_climate(user_input: dict[str, Any]) -> dict[str, str]:
+        """Return field errors for a climate submission."""
+        errors: dict[str, str] = {}
+        if not user_input[CONF_NAME].strip():
+            errors[CONF_NAME] = "name_required"
+        elif float(user_input[CONF_MAX_TEMP]) <= float(user_input[CONF_MIN_TEMP]):
+            errors[CONF_MAX_TEMP] = "max_gt_min"
+        return errors
+
+    async def async_step_add_climate(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add a climate (heater) built from codes.
+
+        For a toggle-only heater, pick the same code for heat on and off.
+        """
+        self._load()
+        assert self._codes is not None
+        assert self._climates is not None
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            errors = self._validate_climate(user_input)
+            if not errors:
+                climate: dict[str, Any] = {CONF_ID: uuid.uuid4().hex}
+                self._build_climate(user_input, climate)
+                self._climates.append(climate)
+                return await self.async_step_init()
+
+        return self.async_show_form(
+            step_id="add_climate",
+            data_schema=self.add_suggested_values_to_schema(
+                self._climate_schema(), user_input
+            ),
+            errors=errors,
+        )
+
+    async def async_step_edit_climate(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose a climate to edit, then open its hub."""
+        self._load()
+        assert self._climates is not None
+
+        if user_input is not None:
+            self._edit_id = user_input[CONF_ID]
+            return await self.async_step_manage_climate()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_ID): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=_as_options(self._climates))
+                )
+            }
+        )
+        return self.async_show_form(step_id="edit_climate", data_schema=schema)
+
+    async def async_step_manage_climate(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Hub for the selected climate."""
+        if _find_by_id(self._climates or [], self._edit_id) is None:
+            return await self.async_step_init()
+        return self.async_show_menu(
+            step_id="manage_climate",
+            menu_options=["edit_climate_details", "done_edit"],
+        )
+
+    async def async_step_edit_climate_details(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit the selected climate's codes and temperature range."""
+        self._load()
+        assert self._codes is not None
+        assert self._climates is not None
+        climate = _find_by_id(self._climates, self._edit_id)
+        if climate is None:
+            return await self.async_step_init()
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            errors = self._validate_climate(user_input)
+            if not errors:
+                self._build_climate(user_input, climate)
+                return await self.async_step_manage_climate()
+
+        return self.async_show_form(
+            step_id="edit_climate_details",
+            data_schema=self.add_suggested_values_to_schema(
+                self._climate_schema(),
+                user_input if user_input is not None else climate,
+            ),
+            errors=errors,
+        )
+
+    async def async_step_remove_climate(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Remove one or more climate entities."""
+        self._load()
+        assert self._climates is not None
+
+        if user_input is not None:
+            to_remove = set(user_input.get(CONF_CLIMATES, []))
+            self._climates = [
+                climate
+                for climate in self._climates
+                if climate[CONF_ID] not in to_remove
+            ]
+            return await self.async_step_init()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_CLIMATES): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=_as_options(self._climates),
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="remove_climate", data_schema=schema)
+
     # --- Shared navigation -------------------------------------------------
 
     async def async_step_done_edit(
@@ -842,5 +1037,6 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                 CONF_BUTTONS: self._buttons,
                 CONF_SWITCHES: self._switches,
                 CONF_LIGHTS: self._lights,
+                CONF_CLIMATES: self._climates,
             }
         )

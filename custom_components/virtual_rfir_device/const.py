@@ -12,6 +12,7 @@ CONF_CODES = "codes"
 CONF_BUTTONS = "buttons"
 CONF_SWITCHES = "switches"
 CONF_LIGHTS = "lights"
+CONF_CLIMATES = "climates"
 
 # Shared item keys
 CONF_ID = "id"
@@ -30,6 +31,15 @@ CONF_OFF_CODE = "off_code"
 # Light brightness-level keys
 CONF_LEVELS = "levels"
 CONF_PERCENT = "percent"
+
+# Climate keys (on_code/off_code above are reused for heat on/off/toggle)
+CONF_UP_CODE = "up_code"
+CONF_DOWN_CODE = "down_code"
+CONF_MIN_TEMP = "min_temp"
+CONF_MAX_TEMP = "max_temp"
+CONF_TEMP_STEP = "temp_step"
+CONF_TARGET_TEMP = "target_temp"
+CONF_TEMP_SENSOR = "temp_sensor"
 
 # Device metadata
 MANUFACTURER = "Virtual RF/IR"

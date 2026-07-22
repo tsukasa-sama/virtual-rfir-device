@@ -36,6 +36,9 @@
           "add_light": "Add light",
           "edit_light": "Edit light",
           "remove_light": "Remove light",
+          "add_climate": "Add climate",
+          "edit_climate": "Edit climate",
+          "remove_climate": "Remove climate",
           "finish": "Done"
         }
       },
@@ -250,11 +253,91 @@
         "data": {
           "lights": "Lights to remove"
         }
+      },
+      "add_climate": {
+        "title": "Add climate",
+        "description": "Create a heater. For a toggle-only heater, pick the same code for heat on and off. Temperature up/down step the target by the step size.",
+        "data": {
+          "name": "Name",
+          "icon": "Icon",
+          "on_code": "Heat on code",
+          "off_code": "Heat off code",
+          "up_code": "Temperature up code",
+          "down_code": "Temperature down code",
+          "min_temp": "Minimum temperature",
+          "max_temp": "Maximum temperature",
+          "temp_step": "Temperature step",
+          "target_temp": "Initial target temperature",
+          "temp_sensor": "Current temperature sensor"
+        },
+        "data_description": {
+          "name": "Climate name (e.g. Fireplace Heat).",
+          "icon": "Optional icon for the climate entity.",
+          "on_code": "Code sent to turn heat on (toggle code for toggle-only heaters).",
+          "off_code": "Code sent to turn heat off (same as on for toggle-only heaters).",
+          "up_code": "Code sent to raise the temperature by one step.",
+          "down_code": "Code sent to lower the temperature by one step.",
+          "min_temp": "Lowest selectable target temperature.",
+          "max_temp": "Highest selectable target temperature.",
+          "temp_step": "How much one up/down press changes the temperature.",
+          "target_temp": "Optional starting target. Defaults to the minimum.",
+          "temp_sensor": "Optional sensor for the real current temperature. If unset, the current temperature mirrors the target."
+        }
+      },
+      "edit_climate": {
+        "title": "Edit climate",
+        "data": {
+          "id": "Climate to edit"
+        }
+      },
+      "manage_climate": {
+        "title": "Edit climate",
+        "description": "Edit this climate, or choose Done to go back.",
+        "menu_options": {
+          "edit_climate_details": "Edit codes and temperature range",
+          "done_edit": "Done"
+        }
+      },
+      "edit_climate_details": {
+        "title": "Edit climate",
+        "data": {
+          "name": "Name",
+          "icon": "Icon",
+          "on_code": "Heat on code",
+          "off_code": "Heat off code",
+          "up_code": "Temperature up code",
+          "down_code": "Temperature down code",
+          "min_temp": "Minimum temperature",
+          "max_temp": "Maximum temperature",
+          "temp_step": "Temperature step",
+          "target_temp": "Initial target temperature",
+          "temp_sensor": "Current temperature sensor"
+        },
+        "data_description": {
+          "name": "Climate name (e.g. Fireplace Heat).",
+          "icon": "Optional icon for the climate entity.",
+          "on_code": "Code sent to turn heat on (toggle code for toggle-only heaters).",
+          "off_code": "Code sent to turn heat off (same as on for toggle-only heaters).",
+          "up_code": "Code sent to raise the temperature by one step.",
+          "down_code": "Code sent to lower the temperature by one step.",
+          "min_temp": "Lowest selectable target temperature.",
+          "max_temp": "Highest selectable target temperature.",
+          "temp_step": "How much one up/down press changes the temperature.",
+          "target_temp": "Optional starting target. Defaults to the minimum.",
+          "temp_sensor": "Optional sensor for the real current temperature. If unset, the current temperature mirrors the target."
+        }
+      },
+      "remove_climate": {
+        "title": "Remove climates",
+        "data": {
+          "climates": "Climates to remove"
+        }
       }
     },
     "error": {
       "name_required": "A name is required.",
-      "code_required": "An IR/RF code is required."
+      "code_required": "An IR/RF code is required.",
+      "max_gt_min": "Maximum temperature must be greater than the minimum."
     }
   }
 }

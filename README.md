@@ -24,6 +24,12 @@ Early development. Current capability:
   - **Lights** — optimistic dimmable lights. Power is an on/off (or toggle)
     code; brightness is a set of absolute-level codes (e.g. 10%…100%). The
     brightness slider snaps to the nearest configured level.
+  - **Climate** — optimistic heaters. Heat on/off (or toggle) code plus
+    relative temperature up/down codes; the target-temp dial steps by firing
+    up/down. Optionally link a sensor for the real current temperature.
+
+A single device can mix any of these — e.g. a fireplace with a climate for
+heat, a switch for the flame, and buttons for effects.
 
 Planned next:
 
