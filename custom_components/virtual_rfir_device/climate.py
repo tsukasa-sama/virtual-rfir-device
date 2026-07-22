@@ -1,9 +1,10 @@
 """Climate platform: optimistic thermostats built from IR/RF codes.
 
-An IR heater typically exposes a heat on/off (or toggle) code plus *relative*
-temperature up/down codes. This entity keeps a virtual target temperature: when
-you change the target, it fires the up/down code once per step to cover the
-difference. Heat mode is driven by the on/off code.
+An IR HVAC unit typically exposes a code to enter each mode (heat and/or cool),
+an off code, and *relative* temperature up/down codes. This entity keeps a
+virtual target temperature chosen from an explicit list of selectable values
+(which need not be evenly spaced): changing the target fires the up/down code
+once per list position to cover the difference.
 
 Because the codes are relative and the appliance reports nothing, the entity is
 assumed-state and can drift if the physical remote is used. A separate
@@ -26,7 +27,6 @@ from homeassistant.const import (
     CONF_NAME,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
-    UnitOfTemperature,
 )
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -36,22 +36,23 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
     CONF_CLIMATES,
+    CONF_COOL,
+    CONF_COOL_CODE,
     CONF_CODES,
     CONF_DOWN_CODE,
+    CONF_HEAT,
+    CONF_HEAT_CODE,
     CONF_ICON,
     CONF_ID,
-    CONF_MAX_TEMP,
-    CONF_MIN_TEMP,
     CONF_OFF_CODE,
-    CONF_ON_CODE,
     CONF_REMOTE,
     CONF_TARGET_TEMP,
     CONF_TEMP_SENSOR,
-    CONF_TEMP_STEP,
+    CONF_TEMPERATURES,
     CONF_UP_CODE,
     DOMAIN,
 )
-from .helpers import async_send_code, resolve_code
+from .helpers import async_send_code, resolve_code_entry
 
 
 async def async_setup_entry(
@@ -68,16 +69,10 @@ async def async_setup_entry(
 
 
 class VirtualRfirClimate(ClimateEntity, RestoreEntity):
-    """An optimistic heater with relative IR/RF temperature control."""
+    """An optimistic thermostat with relative IR/RF temperature control."""
 
     _attr_has_entity_name = True
     _attr_assumed_state = True
-    _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
-    _attr_supported_features = (
-        ClimateEntityFeature.TARGET_TEMPERATURE
-        | ClimateEntityFeature.TURN_ON
-        | ClimateEntityFeature.TURN_OFF
-    )
     # Opt in to the modern turn_on/turn_off behavior (no legacy shim).
     _enable_turn_on_off_backwards_compatibility = False
 
@@ -89,22 +84,42 @@ class VirtualRfirClimate(ClimateEntity, RestoreEntity):
     ) -> None:
         """Initialize the climate entity from a stored definition."""
         self._remote_entity_id: str = entry.data[CONF_REMOTE]
-        self._on_code = resolve_code(codes, climate.get(CONF_ON_CODE))
-        self._off_code = resolve_code(codes, climate.get(CONF_OFF_CODE))
-        self._up_code = resolve_code(codes, climate.get(CONF_UP_CODE))
-        self._down_code = resolve_code(codes, climate.get(CONF_DOWN_CODE))
+        self._off_code = resolve_code_entry(codes, climate.get(CONF_OFF_CODE))
+        self._heat_code = resolve_code_entry(codes, climate.get(CONF_HEAT_CODE))
+        self._cool_code = resolve_code_entry(codes, climate.get(CONF_COOL_CODE))
+        self._up_code = resolve_code_entry(codes, climate.get(CONF_UP_CODE))
+        self._down_code = resolve_code_entry(codes, climate.get(CONF_DOWN_CODE))
         self._temp_sensor: str | None = climate.get(CONF_TEMP_SENSOR)
+
+        # Sorted, de-duplicated list of selectable target temperatures.
+        self._temps = sorted({float(t) for t in climate.get(CONF_TEMPERATURES, [])})
+
+        modes = [HVACMode.OFF]
+        if climate.get(CONF_HEAT):
+            modes.append(HVACMode.HEAT)
+        if climate.get(CONF_COOL):
+            modes.append(HVACMode.COOL)
+        self._attr_hvac_modes = modes
+
+        features = ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
+        if self._temps:
+            features |= ClimateEntityFeature.TARGET_TEMPERATURE
+            self._attr_min_temp = self._temps[0]
+            self._attr_max_temp = self._temps[-1]
+            gaps = [b - a for a, b in zip(self._temps, self._temps[1:])]
+            self._attr_target_temperature_step = min(gaps) if gaps else 1.0
+        self._attr_supported_features = features
 
         self._attr_name = climate[CONF_NAME]
         self._attr_icon = climate.get(CONF_ICON)
         self._attr_unique_id = f"{entry.entry_id}_climate_{climate[CONF_ID]}"
-        self._attr_min_temp = float(climate[CONF_MIN_TEMP])
-        self._attr_max_temp = float(climate[CONF_MAX_TEMP])
-        self._attr_target_temperature_step = float(climate[CONF_TEMP_STEP])
         self._attr_hvac_mode = HVACMode.OFF
-        self._attr_target_temperature = float(
-            climate.get(CONF_TARGET_TEMP, climate[CONF_MIN_TEMP])
-        )
+        self._attr_target_temperature = None
+        default_target = climate.get(CONF_TARGET_TEMP)
+        if default_target is not None:
+            self._attr_target_temperature = float(default_target)
+        elif self._temps:
+            self._attr_target_temperature = self._temps[0]
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.data[CONF_NAME],
@@ -132,7 +147,7 @@ class VirtualRfirClimate(ClimateEntity, RestoreEntity):
         """Restore assumed state and start watching any linked sensor."""
         await super().async_added_to_hass()
         if (last_state := await self.async_get_last_state()) is not None:
-            if last_state.state in (HVACMode.OFF, HVACMode.HEAT):
+            if last_state.state in self._attr_hvac_modes:
                 self._attr_hvac_mode = HVACMode(last_state.state)
             target = last_state.attributes.get(ATTR_TEMPERATURE)
             if target is not None:
@@ -151,41 +166,47 @@ class VirtualRfirClimate(ClimateEntity, RestoreEntity):
         self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        """Turn heat on or off, guarding the toggle against double-firing."""
-        if hvac_mode == self._attr_hvac_mode:
+        """Switch mode, sending the code for the requested mode."""
+        if hvac_mode == self._attr_hvac_mode or hvac_mode not in self._attr_hvac_modes:
             return
-        if hvac_mode == HVACMode.HEAT:
-            if self._on_code is not None:
-                await async_send_code(self.hass, self._remote_entity_id, self._on_code)
-        elif self._off_code is not None:
-            await async_send_code(self.hass, self._remote_entity_id, self._off_code)
+        code = {
+            HVACMode.HEAT: self._heat_code,
+            HVACMode.COOL: self._cool_code,
+            HVACMode.OFF: self._off_code,
+        }.get(hvac_mode)
+        await async_send_code(self.hass, self._remote_entity_id, code)
         self._attr_hvac_mode = hvac_mode
         self.async_write_ha_state()
 
     async def async_turn_on(self) -> None:
-        """Turn heat on."""
-        await self.async_set_hvac_mode(HVACMode.HEAT)
+        """Turn on to the first available active mode (heat preferred)."""
+        for mode in (HVACMode.HEAT, HVACMode.COOL):
+            if mode in self._attr_hvac_modes:
+                await self.async_set_hvac_mode(mode)
+                return
 
     async def async_turn_off(self) -> None:
-        """Turn heat off."""
+        """Turn the unit off."""
         await self.async_set_hvac_mode(HVACMode.OFF)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Step the target toward the requested temperature via up/down codes."""
-        target = kwargs.get(ATTR_TEMPERATURE)
-        if target is None:
+        """Step the target to the nearest listed temperature via up/down codes."""
+        requested = kwargs.get(ATTR_TEMPERATURE)
+        if requested is None or not self._temps:
             return
-        target = min(max(float(target), self._attr_min_temp), self._attr_max_temp)
 
-        step = self._attr_target_temperature_step or 1.0
-        current = self._attr_target_temperature or self._attr_min_temp
-        delta_steps = round((target - current) / step)
+        new_value = min(self._temps, key=lambda t: abs(t - float(requested)))
+        current = self._attr_target_temperature
+        current_value = (
+            min(self._temps, key=lambda t: abs(t - current))
+            if current is not None
+            else self._temps[0]
+        )
+        delta = self._temps.index(new_value) - self._temps.index(current_value)
 
-        code = self._up_code if delta_steps > 0 else self._down_code
-        if code is not None:
-            for _ in range(abs(delta_steps)):
-                await async_send_code(self.hass, self._remote_entity_id, code)
+        code = self._up_code if delta > 0 else self._down_code
+        for _ in range(abs(delta)):
+            await async_send_code(self.hass, self._remote_entity_id, code)
 
-        # Land on the exact stepped value we actually commanded.
-        self._attr_target_temperature = current + delta_steps * step
+        self._attr_target_temperature = new_value
         self.async_write_ha_state()

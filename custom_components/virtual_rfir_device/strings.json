@@ -25,6 +25,8 @@
         "description": "Codes are your IR/RF code library. Buttons and switches are the controls, composed from codes.",
         "menu_options": {
           "add_code": "Add code",
+          "add_reference": "Add remote command",
+          "import_codes": "Import codes from remote (Broadlink)",
           "edit_code": "Edit code",
           "remove_code": "Remove code",
           "add_button": "Add button",
@@ -66,6 +68,27 @@
           "id": "Code to edit"
         }
       },
+      "add_reference": {
+        "title": "Add remote command",
+        "description": "Reference a command already learned on the remote, by name. Works with any remote whose send_command accepts a command name. Leave the device blank if your remote doesn't group commands under a device.",
+        "data": {
+          "name": "Name",
+          "device": "Remote device",
+          "command": "Command name"
+        },
+        "data_description": {
+          "name": "Name for this code (e.g. Power, Flicker).",
+          "device": "Optional. The device the command is grouped under (Broadlink groups commands by device).",
+          "command": "The learned command name the remote resolves when sending."
+        }
+      },
+      "import_codes": {
+        "title": "Import codes from remote",
+        "description": "Select learned commands to add as reference codes. These stay in sync with the remote — re-learning updates them automatically. Already-imported commands are skipped.",
+        "data": {
+          "selection": "Learned commands"
+        }
+      },
       "manage_code": {
         "title": "Edit code",
         "description": "Edit this code, or choose Done to go back.",
@@ -78,11 +101,15 @@
         "title": "Edit code",
         "data": {
           "name": "Name",
-          "code": "IR/RF code"
+          "code": "IR/RF code",
+          "device": "Remote device",
+          "command": "Command name"
         },
         "data_description": {
           "name": "Name for this code (e.g. Power, Flicker, Brightness Up).",
-          "code": "The IR/RF code to transmit. Paste the raw Base64 code; a 'b64:' prefix is added automatically if missing."
+          "code": "The IR/RF code to transmit. Paste the raw Base64 code; a 'b64:' prefix is added automatically if missing.",
+          "device": "The Broadlink device this learned command belongs to.",
+          "command": "The learned command name the remote resolves when sending."
         }
       },
       "add_button": {
@@ -256,31 +283,33 @@
       },
       "add_climate": {
         "title": "Add climate",
-        "description": "Create a heater. For a toggle-only heater, pick the same code for heat on and off. Temperature up/down step the target by the step size.",
+        "description": "Enable heat, cool, or both. For a toggle-only unit, use the same code for the mode and off. Enter one target temperature per line; the dial snaps to the nearest and steps with up/down.",
         "data": {
           "name": "Name",
           "icon": "Icon",
-          "on_code": "Heat on code",
-          "off_code": "Heat off code",
+          "heat": "Enable heat",
+          "cool": "Enable cool",
+          "heat_code": "Heat mode code",
+          "cool_code": "Cool mode code",
+          "off_code": "Off code",
           "up_code": "Temperature up code",
           "down_code": "Temperature down code",
-          "min_temp": "Minimum temperature",
-          "max_temp": "Maximum temperature",
-          "temp_step": "Temperature step",
+          "temperatures": "Temperatures (one per line)",
           "target_temp": "Initial target temperature",
           "temp_sensor": "Current temperature sensor"
         },
         "data_description": {
-          "name": "Climate name (e.g. Fireplace Heat).",
+          "name": "Climate name (e.g. Great Room Fireplace).",
           "icon": "Optional icon for the climate entity.",
-          "on_code": "Code sent to turn heat on (toggle code for toggle-only heaters).",
-          "off_code": "Code sent to turn heat off (same as on for toggle-only heaters).",
-          "up_code": "Code sent to raise the temperature by one step.",
-          "down_code": "Code sent to lower the temperature by one step.",
-          "min_temp": "Lowest selectable target temperature.",
-          "max_temp": "Highest selectable target temperature.",
-          "temp_step": "How much one up/down press changes the temperature.",
-          "target_temp": "Optional starting target. Defaults to the minimum.",
+          "heat": "Offer a heat mode.",
+          "cool": "Offer a cool mode.",
+          "heat_code": "Code sent to enter heat mode (required if heat is enabled).",
+          "cool_code": "Code sent to enter cool mode (required if cool is enabled).",
+          "off_code": "Code sent to turn the unit off (may equal a mode code for toggle units).",
+          "up_code": "Code sent to move up one temperature step.",
+          "down_code": "Code sent to move down one temperature step.",
+          "temperatures": "One selectable target temperature per line. They need not be evenly spaced.",
+          "target_temp": "Optional starting target. Defaults to the lowest temperature.",
           "temp_sensor": "Optional sensor for the real current temperature. If unset, the current temperature mirrors the target."
         }
       },
@@ -294,7 +323,7 @@
         "title": "Edit climate",
         "description": "Edit this climate, or choose Done to go back.",
         "menu_options": {
-          "edit_climate_details": "Edit codes and temperature range",
+          "edit_climate_details": "Edit modes, codes, and temperatures",
           "done_edit": "Done"
         }
       },
@@ -303,27 +332,29 @@
         "data": {
           "name": "Name",
           "icon": "Icon",
-          "on_code": "Heat on code",
-          "off_code": "Heat off code",
+          "heat": "Enable heat",
+          "cool": "Enable cool",
+          "heat_code": "Heat mode code",
+          "cool_code": "Cool mode code",
+          "off_code": "Off code",
           "up_code": "Temperature up code",
           "down_code": "Temperature down code",
-          "min_temp": "Minimum temperature",
-          "max_temp": "Maximum temperature",
-          "temp_step": "Temperature step",
+          "temperatures": "Temperatures (one per line)",
           "target_temp": "Initial target temperature",
           "temp_sensor": "Current temperature sensor"
         },
         "data_description": {
-          "name": "Climate name (e.g. Fireplace Heat).",
+          "name": "Climate name (e.g. Great Room Fireplace).",
           "icon": "Optional icon for the climate entity.",
-          "on_code": "Code sent to turn heat on (toggle code for toggle-only heaters).",
-          "off_code": "Code sent to turn heat off (same as on for toggle-only heaters).",
-          "up_code": "Code sent to raise the temperature by one step.",
-          "down_code": "Code sent to lower the temperature by one step.",
-          "min_temp": "Lowest selectable target temperature.",
-          "max_temp": "Highest selectable target temperature.",
-          "temp_step": "How much one up/down press changes the temperature.",
-          "target_temp": "Optional starting target. Defaults to the minimum.",
+          "heat": "Offer a heat mode.",
+          "cool": "Offer a cool mode.",
+          "heat_code": "Code sent to enter heat mode (required if heat is enabled).",
+          "cool_code": "Code sent to enter cool mode (required if cool is enabled).",
+          "off_code": "Code sent to turn the unit off (may equal a mode code for toggle units).",
+          "up_code": "Code sent to move up one temperature step.",
+          "down_code": "Code sent to move down one temperature step.",
+          "temperatures": "One selectable target temperature per line. They need not be evenly spaced.",
+          "target_temp": "Optional starting target. Defaults to the lowest temperature.",
           "temp_sensor": "Optional sensor for the real current temperature. If unset, the current temperature mirrors the target."
         }
       },
@@ -337,7 +368,9 @@
     "error": {
       "name_required": "A name is required.",
       "code_required": "An IR/RF code is required.",
-      "max_gt_min": "Maximum temperature must be greater than the minimum."
+      "need_mode": "Enable at least one of heat or cool.",
+      "invalid_temps": "Each line must be a number (one temperature per line).",
+      "temps_required": "Enter at least one temperature."
     }
   }
 }

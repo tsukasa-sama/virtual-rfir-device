@@ -18,8 +18,12 @@ CONF_CLIMATES = "climates"
 CONF_ID = "id"
 CONF_ICON = "icon"
 
-# Code-library entry keys
+# Code-library entry keys.
+# A code is either a raw Base64 payload (CONF_CODE) or a reference to a
+# learned Broadlink command (CONF_DEVICE + CONF_COMMAND).
 CONF_CODE = "code"
+CONF_DEVICE = "device"
+CONF_COMMAND = "command"
 
 # Button entry keys
 CONF_CODE_ID = "code_id"
@@ -32,12 +36,15 @@ CONF_OFF_CODE = "off_code"
 CONF_LEVELS = "levels"
 CONF_PERCENT = "percent"
 
-# Climate keys (on_code/off_code above are reused for heat on/off/toggle)
+# Climate keys. off_code (above) turns the unit off / is the mode-off toggle.
+CONF_HEAT = "heat"
+CONF_COOL = "cool"
+CONF_HEAT_CODE = "heat_code"
+CONF_COOL_CODE = "cool_code"
 CONF_UP_CODE = "up_code"
 CONF_DOWN_CODE = "down_code"
-CONF_MIN_TEMP = "min_temp"
-CONF_MAX_TEMP = "max_temp"
-CONF_TEMP_STEP = "temp_step"
+# Explicit list of selectable target temperatures (need not be evenly spaced).
+CONF_TEMPERATURES = "temperatures"
 CONF_TARGET_TEMP = "target_temp"
 CONF_TEMP_SENSOR = "temp_sensor"
 

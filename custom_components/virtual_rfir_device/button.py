@@ -20,7 +20,7 @@ from .const import (
     CONF_REMOTE,
     DOMAIN,
 )
-from .helpers import async_send_code, resolve_code
+from .helpers import async_send_code, resolve_code_entry
 
 
 async def async_setup_entry(
@@ -49,7 +49,7 @@ class VirtualRfirButton(ButtonEntity):
     ) -> None:
         """Initialize the button from a stored button definition."""
         self._remote_entity_id: str = entry.data[CONF_REMOTE]
-        self._code = resolve_code(codes, button.get(CONF_CODE_ID))
+        self._code = resolve_code_entry(codes, button.get(CONF_CODE_ID))
         self._attr_name = button[CONF_NAME]
         self._attr_icon = button.get(CONF_ICON)
         self._attr_unique_id = f"{entry.entry_id}_button_{button[CONF_ID]}"
@@ -60,5 +60,4 @@ class VirtualRfirButton(ButtonEntity):
 
     async def async_press(self) -> None:
         """Transmit the referenced code through the configured remote."""
-        if self._code is not None:
-            await async_send_code(self.hass, self._remote_entity_id, self._code)
+        await async_send_code(self.hass, self._remote_entity_id, self._code)

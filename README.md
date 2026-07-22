@@ -18,6 +18,11 @@ Early development. Current capability:
   linked to the transmitter it's "connected through".
 - Options flow (the device's **Configure** screen) to manage its contents:
   - **Codes** — a library of named IR/RF codes. Data only; creates no entity.
+    A code is either a pasted Base64 payload or a **reference** to a command
+    already learned on the remote (sent by name via `remote.send_command`, so
+    it stays in sync). Add references with **Add remote command** (by name —
+    works with any remote), or auto-populate them with **Import codes from
+    remote** (a Broadlink-specific picker that reads its learned-command store).
   - **Buttons** — stateless button entities that each send one code.
   - **Switches** — optimistic (assumed-state) on/off switches built from codes.
     Pick the same code for both directions for a toggle-only appliance.

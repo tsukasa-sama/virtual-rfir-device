@@ -28,7 +28,7 @@ from .const import (
     CONF_SWITCHES,
     DOMAIN,
 )
-from .helpers import async_send_code, resolve_code
+from .helpers import async_send_code, resolve_code_entry
 
 
 async def async_setup_entry(
@@ -58,8 +58,8 @@ class VirtualRfirSwitch(SwitchEntity, RestoreEntity):
     ) -> None:
         """Initialize the switch from a stored switch definition."""
         self._remote_entity_id: str = entry.data[CONF_REMOTE]
-        self._on_code = resolve_code(codes, switch.get(CONF_ON_CODE))
-        self._off_code = resolve_code(codes, switch.get(CONF_OFF_CODE))
+        self._on_code = resolve_code_entry(codes, switch.get(CONF_ON_CODE))
+        self._off_code = resolve_code_entry(codes, switch.get(CONF_OFF_CODE))
         self._attr_name = switch[CONF_NAME]
         self._attr_icon = switch.get(CONF_ICON)
         self._attr_unique_id = f"{entry.entry_id}_switch_{switch[CONF_ID]}"
@@ -77,14 +77,12 @@ class VirtualRfirSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Send the on code and optimistically mark the switch on."""
-        if self._on_code is not None:
-            await async_send_code(self.hass, self._remote_entity_id, self._on_code)
+        await async_send_code(self.hass, self._remote_entity_id, self._on_code)
         self._attr_is_on = True
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Send the off code and optimistically mark the switch off."""
-        if self._off_code is not None:
-            await async_send_code(self.hass, self._remote_entity_id, self._off_code)
+        await async_send_code(self.hass, self._remote_entity_id, self._off_code)
         self._attr_is_on = False
         self.async_write_ha_state()

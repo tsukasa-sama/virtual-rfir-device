@@ -38,7 +38,7 @@ from .const import (
     CONF_REMOTE,
     DOMAIN,
 )
-from .helpers import async_send_code, resolve_code
+from .helpers import async_send_code, resolve_code_entry
 
 
 def _pct_to_brightness(percent: int) -> int:
@@ -78,13 +78,13 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
     ) -> None:
         """Initialize the light from a stored light definition."""
         self._remote_entity_id: str = entry.data[CONF_REMOTE]
-        self._on_code = resolve_code(codes, light.get(CONF_ON_CODE))
-        self._off_code = resolve_code(codes, light.get(CONF_OFF_CODE))
+        self._on_code = resolve_code_entry(codes, light.get(CONF_ON_CODE))
+        self._off_code = resolve_code_entry(codes, light.get(CONF_OFF_CODE))
 
-        # Resolve and sort the brightness levels: list of (percent, code).
-        levels: list[tuple[int, str]] = []
+        # Resolve and sort the brightness levels: list of (percent, code entry).
+        levels: list[tuple[int, dict[str, Any]]] = []
         for level in light.get(CONF_LEVELS, []):
-            code = resolve_code(codes, level.get(CONF_CODE_ID))
+            code = resolve_code_entry(codes, level.get(CONF_CODE_ID))
             percent = level.get(CONF_PERCENT)
             if code is not None and percent is not None:
                 levels.append((int(percent), code))
@@ -117,8 +117,8 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
             if brightness is not None:
                 self._attr_brightness = int(brightness)
 
-    def _nearest_level(self, brightness: int) -> tuple[int, str]:
-        """Return the (percent, code) level closest to a 0-255 brightness."""
+    def _nearest_level(self, brightness: int) -> tuple[int, dict[str, Any]]:
+        """Return the (percent, code entry) level closest to a brightness."""
         target = _brightness_to_pct(brightness)
         return min(self._levels, key=lambda item: abs(item[0] - target))
 
@@ -128,7 +128,7 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
         The appliance needs power before brightness codes take effect, so the
         on code is always sent first when the light was off.
         """
-        if not self._attr_is_on and self._on_code is not None:
+        if not self._attr_is_on:
             await async_send_code(self.hass, self._remote_entity_id, self._on_code)
         self._attr_is_on = True
 
@@ -144,7 +144,7 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Send the off code and optimistically mark the light off."""
-        if self._attr_is_on and self._off_code is not None:
+        if self._attr_is_on:
             await async_send_code(self.hass, self._remote_entity_id, self._off_code)
         self._attr_is_on = False
         self.async_write_ha_state()

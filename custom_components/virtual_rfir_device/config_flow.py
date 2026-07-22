@@ -15,7 +15,11 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
+from homeassistant.helpers.storage import Store
 
 from .const import (
     CONF_BUTTONS,
@@ -23,13 +27,17 @@ from .const import (
     CONF_CODE,
     CONF_CODE_ID,
     CONF_CODES,
+    CONF_COMMAND,
+    CONF_COOL,
+    CONF_COOL_CODE,
+    CONF_DEVICE,
     CONF_DOWN_CODE,
+    CONF_HEAT,
+    CONF_HEAT_CODE,
     CONF_ICON,
     CONF_ID,
     CONF_LEVELS,
     CONF_LIGHTS,
-    CONF_MAX_TEMP,
-    CONF_MIN_TEMP,
     CONF_OFF_CODE,
     CONF_ON_CODE,
     CONF_PERCENT,
@@ -37,10 +45,17 @@ from .const import (
     CONF_SWITCHES,
     CONF_TARGET_TEMP,
     CONF_TEMP_SENSOR,
-    CONF_TEMP_STEP,
+    CONF_TEMPERATURES,
     CONF_UP_CODE,
     DOMAIN,
 )
+
+
+# Field key for the import multi-select, and the delimiter used to pack a
+# (device, command) pair into a single select value (0x1f = ASCII unit
+# separator, which won't appear in a learned command name).
+CONF_SELECTION = "selection"
+_IMPORT_DELIM = "\x1f"
 
 
 def _as_options(items: list[dict[str, Any]]) -> list[selector.SelectOptionDict]:
@@ -127,6 +142,9 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         self._switches: list[dict[str, Any]] | None = None
         self._lights: list[dict[str, Any]] | None = None
         self._climates: list[dict[str, Any]] | None = None
+        # Learned commands available on the remote, as {device: {command: code}}.
+        # None until first loaded; {} if the remote has none / can't be read.
+        self._learned: dict[str, Any] | None = None
         # Id of the item currently being edited (set by an edit-select step),
         # also used as the "current light" while editing its brightness levels.
         self._edit_id: str | None = None
@@ -169,7 +187,12 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         assert self._switches is not None
         assert self._lights is not None
 
-        menu_options = ["add_code"]
+        if self._learned is None:
+            self._learned = await self._async_load_learned()
+
+        menu_options = ["add_code", "add_reference"]
+        if self._learned:
+            menu_options.append("import_codes")
         if self._codes:
             menu_options += ["edit_code", "remove_code"]
             # Entities reference codes, so require codes first.
@@ -227,6 +250,131 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             data_schema=self.add_suggested_values_to_schema(schema, user_input),
             errors=errors,
         )
+
+    async def async_step_add_reference(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add a code that references a command already learned on the remote.
+
+        Works with any remote whose ``send_command`` accepts a command name
+        (Broadlink, Xiaomi, SwitchBot, ...). Leave the device blank for remotes
+        that don't group commands under a device.
+        """
+        self._load()
+        assert self._codes is not None
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            name = user_input[CONF_NAME].strip()
+            command = user_input[CONF_COMMAND].strip()
+            if not name:
+                errors[CONF_NAME] = "name_required"
+            elif not command:
+                errors[CONF_COMMAND] = "code_required"
+            else:
+                reference = {
+                    CONF_ID: uuid.uuid4().hex,
+                    CONF_NAME: name,
+                    CONF_COMMAND: command,
+                }
+                if device := (user_input.get(CONF_DEVICE) or "").strip():
+                    reference[CONF_DEVICE] = device
+                self._codes.append(reference)
+                return await self.async_step_init()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): selector.TextSelector(),
+                vol.Optional(CONF_DEVICE): selector.TextSelector(),
+                vol.Required(CONF_COMMAND): selector.TextSelector(),
+            }
+        )
+        return self.async_show_form(
+            step_id="add_reference",
+            data_schema=self.add_suggested_values_to_schema(schema, user_input),
+            errors=errors,
+        )
+
+    async def _async_load_learned(self) -> dict[str, Any]:
+        """Load learned commands for the configured remote (Broadlink store).
+
+        Returns ``{device: {command: code}}`` or an empty dict if the remote
+        isn't a Broadlink (or has no learned commands / can't be read).
+        """
+        remote_entity_id = self.config_entry.data[CONF_REMOTE]
+        entity_registry = er.async_get(self.hass)
+        remote_entry = entity_registry.async_get(remote_entity_id)
+        if remote_entry is None or remote_entry.device_id is None:
+            return {}
+
+        device_registry = dr.async_get(self.hass)
+        device = device_registry.async_get(remote_entry.device_id)
+        if device is None:
+            return {}
+
+        mac = next(
+            (
+                value.replace(":", "").lower()
+                for conn_type, value in device.connections
+                if conn_type == CONNECTION_NETWORK_MAC
+            ),
+            None,
+        )
+        if mac is None:
+            return {}
+
+        store: Store = Store(self.hass, 1, f"broadlink_remote_{mac}_codes")
+        data = await store.async_load()
+        return data if isinstance(data, dict) else {}
+
+    async def async_step_import_codes(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Import learned commands from the remote as reference codes."""
+        self._load()
+        assert self._codes is not None
+        learned = self._learned or {}
+
+        if user_input is not None:
+            existing = {
+                (code.get(CONF_DEVICE), code.get(CONF_COMMAND))
+                for code in self._codes
+                if CONF_COMMAND in code
+            }
+            for token in user_input.get(CONF_SELECTION, []):
+                device, command = token.split(_IMPORT_DELIM, 1)
+                if (device, command) in existing:
+                    continue
+                self._codes.append(
+                    {
+                        CONF_ID: uuid.uuid4().hex,
+                        CONF_NAME: command,
+                        CONF_DEVICE: device,
+                        CONF_COMMAND: command,
+                    }
+                )
+            return await self.async_step_init()
+
+        options = [
+            selector.SelectOptionDict(
+                value=f"{device}{_IMPORT_DELIM}{command}",
+                label=f"{device}: {command}",
+            )
+            for device, commands in learned.items()
+            for command in commands
+        ]
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_SELECTION): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=options,
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="import_codes", data_schema=schema)
 
     async def async_step_remove_code(
         self, user_input: dict[str, Any] | None = None
@@ -289,34 +437,52 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_edit_code_details(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Edit the selected code's name and Base64 value."""
+        """Edit the selected code.
+
+        Raw codes edit name + Base64; reference codes (imported from a remote)
+        edit name + the learned device/command they point at.
+        """
         self._load()
         assert self._codes is not None
         code = _find_by_id(self._codes, self._edit_id)
         if code is None:
             return await self.async_step_init()
 
+        is_reference = CONF_COMMAND in code
+        payload_key = CONF_COMMAND if is_reference else CONF_CODE
+
         errors: dict[str, str] = {}
         if user_input is not None:
             name = user_input[CONF_NAME].strip()
-            value = user_input[CONF_CODE].strip()
+            payload = user_input[payload_key].strip()
             if not name:
                 errors[CONF_NAME] = "name_required"
-            elif not value:
-                errors[CONF_CODE] = "code_required"
+            elif not payload:
+                errors[payload_key] = "code_required"
             else:
                 code[CONF_NAME] = name
-                code[CONF_CODE] = value
+                code[payload_key] = payload
+                if is_reference:
+                    _set_optional(code, CONF_DEVICE, user_input.get(CONF_DEVICE))
                 return await self.async_step_manage_code()
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_NAME): selector.TextSelector(),
-                vol.Required(CONF_CODE): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
-            }
-        )
+        if is_reference:
+            schema = vol.Schema(
+                {
+                    vol.Required(CONF_NAME): selector.TextSelector(),
+                    vol.Optional(CONF_DEVICE): selector.TextSelector(),
+                    vol.Required(CONF_COMMAND): selector.TextSelector(),
+                }
+            )
+        else:
+            schema = vol.Schema(
+                {
+                    vol.Required(CONF_NAME): selector.TextSelector(),
+                    vol.Required(CONF_CODE): selector.TextSelector(
+                        selector.TextSelectorConfig(multiline=True)
+                    ),
+                }
+            )
         return self.async_show_form(
             step_id="edit_code_details",
             data_schema=self.add_suggested_values_to_schema(
@@ -838,31 +1004,29 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     # --- Climate -----------------------------------------------------------
 
     def _climate_schema(self) -> vol.Schema:
-        """Return the schema for a climate's codes and temperature range."""
+        """Return the schema for a climate's modes, codes, and temperatures."""
         code_select = selector.SelectSelector(
             selector.SelectSelectorConfig(options=self._code_options())
-        )
-        temp_number = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0, max=200, step=0.5, mode=selector.NumberSelectorMode.BOX
-            )
         )
         return vol.Schema(
             {
                 vol.Required(CONF_NAME): selector.TextSelector(),
                 vol.Optional(CONF_ICON): selector.IconSelector(),
-                vol.Required(CONF_ON_CODE): code_select,
+                vol.Optional(CONF_HEAT, default=True): selector.BooleanSelector(),
+                vol.Optional(CONF_COOL, default=False): selector.BooleanSelector(),
+                vol.Optional(CONF_HEAT_CODE): code_select,
+                vol.Optional(CONF_COOL_CODE): code_select,
                 vol.Required(CONF_OFF_CODE): code_select,
                 vol.Required(CONF_UP_CODE): code_select,
                 vol.Required(CONF_DOWN_CODE): code_select,
-                vol.Required(CONF_MIN_TEMP, default=60): temp_number,
-                vol.Required(CONF_MAX_TEMP, default=80): temp_number,
-                vol.Required(CONF_TEMP_STEP, default=1): selector.NumberSelector(
+                vol.Required(CONF_TEMPERATURES): selector.TextSelector(
+                    selector.TextSelectorConfig(multiline=True)
+                ),
+                vol.Optional(CONF_TARGET_TEMP): selector.NumberSelector(
                     selector.NumberSelectorConfig(
-                        min=0.1, max=10, step=0.1, mode=selector.NumberSelectorMode.BOX
+                        min=0, max=200, step=0.5, mode=selector.NumberSelectorMode.BOX
                     )
                 ),
-                vol.Optional(CONF_TARGET_TEMP): temp_number,
                 vol.Optional(CONF_TEMP_SENSOR): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="sensor", device_class="temperature"
@@ -871,18 +1035,55 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             }
         )
 
+    @staticmethod
+    def _climate_suggested(climate: dict[str, Any]) -> dict[str, Any]:
+        """Return climate values shaped for the form (temperatures as text)."""
+        suggested = dict(climate)
+        temps = climate.get(CONF_TEMPERATURES) or []
+        suggested[CONF_TEMPERATURES] = "\n".join(
+            str(int(t)) if float(t).is_integer() else str(t) for t in temps
+        )
+        return suggested
+
+    @staticmethod
+    def _parse_temperatures(text: str) -> list[float] | None:
+        """Parse a temperatures text box (one value per line).
+
+        Returns a sorted, de-duplicated list, or ``None`` if a line is not a
+        number.
+        """
+        values: set[float] = set()
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                values.add(float(stripped))
+            except ValueError:
+                return None
+        return sorted(values)
+
     def _build_climate(
         self, user_input: dict[str, Any], climate: dict[str, Any]
     ) -> None:
         """Write validated climate fields from user input into a climate dict."""
+        heat = bool(user_input.get(CONF_HEAT))
+        cool = bool(user_input.get(CONF_COOL))
         climate[CONF_NAME] = user_input[CONF_NAME].strip()
-        climate[CONF_ON_CODE] = user_input[CONF_ON_CODE]
+        climate[CONF_HEAT] = heat
+        climate[CONF_COOL] = cool
         climate[CONF_OFF_CODE] = user_input[CONF_OFF_CODE]
         climate[CONF_UP_CODE] = user_input[CONF_UP_CODE]
         climate[CONF_DOWN_CODE] = user_input[CONF_DOWN_CODE]
-        climate[CONF_MIN_TEMP] = float(user_input[CONF_MIN_TEMP])
-        climate[CONF_MAX_TEMP] = float(user_input[CONF_MAX_TEMP])
-        climate[CONF_TEMP_STEP] = float(user_input[CONF_TEMP_STEP])
+        climate[CONF_TEMPERATURES] = self._parse_temperatures(
+            user_input[CONF_TEMPERATURES]
+        )
+        _set_optional(
+            climate, CONF_HEAT_CODE, user_input.get(CONF_HEAT_CODE) if heat else None
+        )
+        _set_optional(
+            climate, CONF_COOL_CODE, user_input.get(CONF_COOL_CODE) if cool else None
+        )
         _set_optional(climate, CONF_ICON, user_input.get(CONF_ICON))
         _set_optional(climate, CONF_TEMP_SENSOR, user_input.get(CONF_TEMP_SENSOR))
         if (target := user_input.get(CONF_TARGET_TEMP)) is not None:
@@ -890,22 +1091,34 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         else:
             climate.pop(CONF_TARGET_TEMP, None)
 
-    @staticmethod
-    def _validate_climate(user_input: dict[str, Any]) -> dict[str, str]:
+    @classmethod
+    def _validate_climate(cls, user_input: dict[str, Any]) -> dict[str, str]:
         """Return field errors for a climate submission."""
         errors: dict[str, str] = {}
+        heat = bool(user_input.get(CONF_HEAT))
+        cool = bool(user_input.get(CONF_COOL))
         if not user_input[CONF_NAME].strip():
             errors[CONF_NAME] = "name_required"
-        elif float(user_input[CONF_MAX_TEMP]) <= float(user_input[CONF_MIN_TEMP]):
-            errors[CONF_MAX_TEMP] = "max_gt_min"
+        if not heat and not cool:
+            errors["base"] = "need_mode"
+        if heat and not user_input.get(CONF_HEAT_CODE):
+            errors[CONF_HEAT_CODE] = "code_required"
+        if cool and not user_input.get(CONF_COOL_CODE):
+            errors[CONF_COOL_CODE] = "code_required"
+        temps = cls._parse_temperatures(user_input[CONF_TEMPERATURES])
+        if temps is None:
+            errors[CONF_TEMPERATURES] = "invalid_temps"
+        elif not temps:
+            errors[CONF_TEMPERATURES] = "temps_required"
         return errors
 
     async def async_step_add_climate(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Add a climate (heater) built from codes.
+        """Add a climate (heat and/or cool) built from codes.
 
-        For a toggle-only heater, pick the same code for heat on and off.
+        Enable heat, cool, or both. For a toggle-only unit, the mode code and
+        the off code can be the same.
         """
         self._load()
         assert self._codes is not None
@@ -981,7 +1194,9 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             step_id="edit_climate_details",
             data_schema=self.add_suggested_values_to_schema(
                 self._climate_schema(),
-                user_input if user_input is not None else climate,
+                user_input
+                if user_input is not None
+                else self._climate_suggested(climate),
             ),
             errors=errors,
         )
