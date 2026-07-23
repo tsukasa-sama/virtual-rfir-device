@@ -151,42 +151,58 @@
         }
       },
       "add_light": {
-        "title": "Add light — power",
-        "description": "Set the power commands. For a toggle-only appliance, pick the same command for on and off. Next you'll add brightness levels.",
+        "title": "Add light",
+        "description": "Set the power commands and choose how the light dims. For a toggle-only appliance, pick the same command for on and off. Preset lights add their brightness levels next.",
         "data": {
           "name": "Name",
           "icon": "Icon",
           "on_code": "On command",
-          "off_code": "Off command"
+          "off_code": "Off command",
+          "dim_mode": "Dimming",
+          "up_code": "Brightness up command",
+          "down_code": "Brightness down command",
+          "steps": "Brightness steps (%)"
         },
         "data_description": {
           "name": "Light name (e.g. Counter Lights).",
           "icon": "Optional icon for the light.",
           "on_code": "Command sent to turn the light on.",
-          "off_code": "Command sent to turn the light off."
+          "off_code": "Command sent to turn the light off.",
+          "dim_mode": "On/off only; Preset levels (a code per level); or Up/down (relative brightness_up/down over a list of steps).",
+          "up_code": "Relative only: command that steps brightness up one level.",
+          "down_code": "Relative only: command that steps brightness down one level.",
+          "steps": "Relative only: selectable brightness percentages, one per line or comma-separated (e.g. 10, 30, 60, 100). Need not be evenly spaced."
         }
       },
       "edit_light_details": {
-        "title": "Edit light — power",
-        "description": "Update the power commands. Next you'll manage brightness levels.",
+        "title": "Edit light",
+        "description": "Update the power commands and dimming. Preset lights manage their brightness levels from the light's menu.",
         "data": {
           "name": "Name",
           "icon": "Icon",
           "on_code": "On command",
-          "off_code": "Off command"
+          "off_code": "Off command",
+          "dim_mode": "Dimming",
+          "up_code": "Brightness up command",
+          "down_code": "Brightness down command",
+          "steps": "Brightness steps (%)"
         },
         "data_description": {
           "name": "Light name (e.g. Counter Lights).",
           "icon": "Optional icon for the light.",
           "on_code": "Command sent to turn the light on.",
-          "off_code": "Command sent to turn the light off."
+          "off_code": "Command sent to turn the light off.",
+          "dim_mode": "On/off only; Preset levels (a code per level); or Up/down (relative brightness_up/down over a list of steps).",
+          "up_code": "Relative only: command that steps brightness up one level.",
+          "down_code": "Relative only: command that steps brightness down one level.",
+          "steps": "Relative only: selectable brightness percentages, one per line or comma-separated (e.g. 10, 30, 60, 100). Need not be evenly spaced."
         }
       },
       "manage_light": {
         "title": "Edit light",
-        "description": "Edit the power commands or brightness levels. The slider snaps to the nearest level. Choose Done when finished.",
+        "description": "Edit the power commands and dimming. Preset lights can also add or remove brightness levels (the slider snaps to the nearest). Choose Done when finished.",
         "menu_options": {
-          "edit_light_details": "Edit power commands",
+          "edit_light_details": "Edit power commands and dimming",
           "add_level": "Add brightness level",
           "remove_level": "Remove brightness level",
           "done_edit": "Done"
@@ -310,7 +326,9 @@
       "code_required": "A command is required.",
       "need_mode": "Enable at least one of heat or cool.",
       "invalid_temps": "Each line must be a number (one temperature per line).",
-      "temps_required": "Enter at least one temperature."
+      "temps_required": "Enter at least one temperature.",
+      "invalid_steps": "Each brightness step must be a whole number from 1 to 100.",
+      "steps_required": "Enter at least one brightness step."
     }
   }
 }

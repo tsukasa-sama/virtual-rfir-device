@@ -30,8 +30,11 @@ Early development. Current capability:
   - **Switches** — optimistic (assumed-state) on/off switches. Pick the same
     command for both directions for a toggle-only appliance.
   - **Lights** — optimistic dimmable lights. Power is an on/off (or toggle)
-    command; brightness is a set of absolute-level commands (e.g. 10%…100%). The
-    brightness slider snaps to the nearest configured level.
+    command. Dimming is one of: **preset** (a code per absolute level, e.g.
+    10%…100% — the slider snaps to the nearest), **relative** (`brightness_up` /
+    `brightness_down` codes stepped across a list of percentages, like the
+    climate dial), or **none** (on/off only). Brightness is inert while the
+    light is off — adjusting it snaps back; turn the light on first.
   - **Climate** — optimistic heaters/coolers. A mode command per enabled mode
     (heat and/or cool) plus relative temperature up/down commands; the
     target-temp dial steps by firing up/down. Optionally link a sensor for the

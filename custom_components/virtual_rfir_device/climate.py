@@ -184,9 +184,20 @@ class VirtualRfirClimate(ClimateEntity, RestoreEntity):
         await self.async_set_hvac_mode(HVACMode.OFF)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Step the target to the nearest listed temperature via up/down codes."""
+        """Step the target to the nearest listed temperature via up/down codes.
+
+        The up/down codes are relative and only take effect while the unit is
+        running, so temperature changes are ignored when it's off (turn it on to
+        a mode first). This also keeps the assumed target from drifting away
+        from the appliance while off.
+        """
         requested = kwargs.get(ATTR_TEMPERATURE)
         if requested is None or not self._temps:
+            return
+
+        if self._attr_hvac_mode == HVACMode.OFF:
+            # Snap the dial back to the unchanged target.
+            self.async_write_ha_state()
             return
 
         new_value = min(self._temps, key=lambda t: abs(t - float(requested)))
