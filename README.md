@@ -14,31 +14,42 @@ becomes a first-class virtual device.
 Early development. Current capability:
 
 - Config flow to create a named virtual device bound to an IR/RF `remote`
-  entity. The device appears under **Settings → Devices & services → Devices**,
-  linked to the transmitter it's "connected through".
-- Options flow (the device's **Configure** screen) to manage its contents:
-  - **Codes** — a library of named IR/RF codes. Data only; creates no entity.
-    A code is either a pasted Base64 payload or a **reference** to a command
-    already learned on the remote (sent by name via `remote.send_command`, so
-    it stays in sync). Add references with **Add remote command** (by name —
-    works with any remote), or auto-populate them with **Import codes from
-    remote** (a Broadlink-specific picker that reads its learned-command store).
-  - **Buttons** — stateless button entities that each send one code.
-  - **Switches** — optimistic (assumed-state) on/off switches built from codes.
-    Pick the same code for both directions for a toggle-only appliance.
+  entity. After picking the remote you choose which **command group** on it this
+  device represents — the remote stores learned commands under top-level groups
+  (a Broadlink "device", e.g. `great_room_fireplace`), and the virtual device is
+  scoped to one so only its commands are offered. The device appears under
+  **Settings → Devices & services → Devices**, linked to the transmitter it's
+  "connected through".
+- Options flow (the device's **Configure** screen) to build its controls from
+  that group's **learned commands**. The commands are read **live** each time a
+  picker is shown; a control stores only the command's name and transmits it by
+  name via `remote.send_command` (within the chosen group). Because nothing is
+  copied, re-learning a command updates every control that uses it — no
+  reconfiguration, no stale copy. Control types:
+  - **Buttons** — stateless button entities that each send one command.
+  - **Switches** — optimistic (assumed-state) on/off switches. Pick the same
+    command for both directions for a toggle-only appliance.
   - **Lights** — optimistic dimmable lights. Power is an on/off (or toggle)
-    code; brightness is a set of absolute-level codes (e.g. 10%…100%). The
+    command; brightness is a set of absolute-level commands (e.g. 10%…100%). The
     brightness slider snaps to the nearest configured level.
-  - **Climate** — optimistic heaters. Heat on/off (or toggle) code plus
-    relative temperature up/down codes; the target-temp dial steps by firing
-    up/down. Optionally link a sensor for the real current temperature.
+  - **Climate** — optimistic heaters/coolers. A mode command per enabled mode
+    (heat and/or cool) plus relative temperature up/down commands; the
+    target-temp dial steps by firing up/down. Optionally link a sensor for the
+    real current temperature.
 
 A single device can mix any of these — e.g. a fireplace with a climate for
 heat, a switch for the flame, and buttons for effects.
 
+> **Reading learned commands is Broadlink-specific for now.** The live picker
+> reads Broadlink's learned-command store (`.storage/broadlink_remote_<mac>_codes`).
+> Sending is remote-agnostic (any remote that resolves commands by name), but
+> other remotes won't populate the picker until an adapter for their store is
+> added.
+
 Planned next:
 
 - Additional composite entity types (select, number, fan, ...).
+- Adapters to read learned commands from remotes other than Broadlink.
 
 ## Installation (HACS)
 
@@ -50,10 +61,14 @@ Planned next:
 
 ## Design
 
-An IR/RF device is a flat bag of named codes, while Home Assistant wants
-semantic, stateful entities. This integration separates the two concerns:
+An IR/RF remote is a flat bag of named learned commands, while Home Assistant
+wants semantic, stateful entities. This integration composes the latter from
+the former without ever copying:
 
-1. **Codes** are the raw material — a named library of IR/RF codes, no entities.
-2. **Entities** (buttons, switches, and later select / number / fan / ...) are
-   composed by referencing codes. Nothing appears on the device until you add
-   one, so codes are never silently duplicated as controls.
+1. **Learned commands** are the raw material — they live in the remote's own
+   store, not here. They're read live whenever you configure a control.
+2. **Entities** (buttons, switches, lights, climate, and later select / number
+   / fan / ...) are composed by pointing at a learned command. An entity stores
+   only the pointer and sends by name, so the remote resolves the current code
+   every time. Re-learning a command flows through automatically; nothing is
+   snapshotted into this integration's config.

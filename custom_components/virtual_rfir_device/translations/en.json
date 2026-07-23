@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Add virtual RF/IR device",
-        "description": "Create a virtual device that represents an appliance controlled through an existing IR/RF remote.",
+        "description": "Create a virtual device that represents an appliance controlled through an existing IR/RF remote. Next you'll pick which set of learned commands it uses.",
         "data": {
           "name": "Name",
           "remote": "IR/RF remote"
@@ -12,23 +12,31 @@
           "name": "Friendly name for the appliance (e.g. Family Room Fireplace).",
           "remote": "The remote entity (e.g. a Broadlink transmitter) used to send commands to this appliance."
         }
+      },
+      "appliance": {
+        "title": "Choose the appliance",
+        "description": "The remote groups its learned commands under a name (its Broadlink \"device\"). Pick the group this virtual device represents — only its commands will be offered when building controls.",
+        "data": {
+          "device": "Command group"
+        },
+        "data_description": {
+          "device": "The learned-command group on the remote for this appliance (e.g. great_room_fireplace)."
+        }
       }
     },
     "error": {
       "name_required": "A name is required."
+    },
+    "abort": {
+      "no_commands": "No learned commands were found for the selected remote. Learn some commands on it first (this currently reads a Broadlink remote's codes store), then add the device again."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Manage device",
-        "description": "Codes are your IR/RF code library. Buttons and switches are the controls, composed from codes.",
+        "description": "Buttons, switches, lights, and climates are built from this appliance's learned commands on the remote. Learned commands are read live, so re-learning a command updates every control that uses it. If nothing can be added yet, learn some commands for it on the remote first.",
         "menu_options": {
-          "add_code": "Add code",
-          "add_reference": "Add remote command",
-          "import_codes": "Import codes from remote (Broadlink)",
-          "edit_code": "Edit code",
-          "remove_code": "Remove code",
           "add_button": "Add button",
           "edit_button": "Edit button",
           "remove_button": "Remove button",
@@ -44,86 +52,18 @@
           "finish": "Done"
         }
       },
-      "add_code": {
-        "title": "Add code",
-        "description": "Store an IR/RF code in the library. This creates no control on its own — add a button or switch to use it.",
-        "data": {
-          "name": "Name",
-          "code": "IR/RF code"
-        },
-        "data_description": {
-          "name": "Name for this code (e.g. Power, Flicker, Brightness Up).",
-          "code": "The IR/RF code to transmit. Paste the raw Base64 code; a 'b64:' prefix is added automatically if missing."
-        }
-      },
-      "remove_code": {
-        "title": "Remove codes",
-        "data": {
-          "codes": "Codes to remove"
-        }
-      },
-      "edit_code": {
-        "title": "Edit code",
-        "data": {
-          "id": "Code to edit"
-        }
-      },
-      "add_reference": {
-        "title": "Add remote command",
-        "description": "Reference a command already learned on the remote, by name. Works with any remote whose send_command accepts a command name. Leave the device blank if your remote doesn't group commands under a device.",
-        "data": {
-          "name": "Name",
-          "device": "Remote device",
-          "command": "Command name"
-        },
-        "data_description": {
-          "name": "Name for this code (e.g. Power, Flicker).",
-          "device": "Optional. The device the command is grouped under (Broadlink groups commands by device).",
-          "command": "The learned command name the remote resolves when sending."
-        }
-      },
-      "import_codes": {
-        "title": "Import codes from remote",
-        "description": "Select learned commands to add as reference codes. These stay in sync with the remote — re-learning updates them automatically. Already-imported commands are skipped.",
-        "data": {
-          "selection": "Learned commands"
-        }
-      },
-      "manage_code": {
-        "title": "Edit code",
-        "description": "Edit this code, or choose Done to go back.",
-        "menu_options": {
-          "edit_code_details": "Edit name and code",
-          "done_edit": "Done"
-        }
-      },
-      "edit_code_details": {
-        "title": "Edit code",
-        "data": {
-          "name": "Name",
-          "code": "IR/RF code",
-          "device": "Remote device",
-          "command": "Command name"
-        },
-        "data_description": {
-          "name": "Name for this code (e.g. Power, Flicker, Brightness Up).",
-          "code": "The IR/RF code to transmit. Paste the raw Base64 code; a 'b64:' prefix is added automatically if missing.",
-          "device": "The Broadlink device this learned command belongs to.",
-          "command": "The learned command name the remote resolves when sending."
-        }
-      },
       "add_button": {
         "title": "Add button",
-        "description": "Create a button control that sends a code from the library.",
+        "description": "Create a button control that sends a command learned on the remote.",
         "data": {
           "name": "Name",
           "icon": "Icon",
-          "code_id": "Code"
+          "code_id": "Command"
         },
         "data_description": {
           "name": "Button name (e.g. Flicker, Brightness Up).",
           "icon": "Optional icon for the button (e.g. mdi:fire).",
-          "code_id": "The code this button sends."
+          "code_id": "The learned command this button sends."
         }
       },
       "remove_button": {
@@ -142,7 +82,7 @@
         "title": "Edit button",
         "description": "Edit this button, or choose Done to go back.",
         "menu_options": {
-          "edit_button_details": "Edit name, icon, and code",
+          "edit_button_details": "Edit name, icon, and command",
           "done_edit": "Done"
         }
       },
@@ -151,28 +91,28 @@
         "data": {
           "name": "Name",
           "icon": "Icon",
-          "code_id": "Code"
+          "code_id": "Command"
         },
         "data_description": {
           "name": "Button name (e.g. Flicker, Brightness Up).",
           "icon": "Optional icon for the button (e.g. mdi:fire).",
-          "code_id": "The code this button sends."
+          "code_id": "The learned command this button sends."
         }
       },
       "add_switch": {
         "title": "Add switch",
-        "description": "Create an on/off switch from codes in the library. For a toggle-only appliance, pick the same code for both on and off.",
+        "description": "Create an on/off switch from commands learned on the remote. For a toggle-only appliance, pick the same command for both on and off.",
         "data": {
           "name": "Name",
           "icon": "Icon",
-          "on_code": "On code",
-          "off_code": "Off code"
+          "on_code": "On command",
+          "off_code": "Off command"
         },
         "data_description": {
           "name": "Switch name (e.g. Power).",
           "icon": "Optional icon for the switch (e.g. mdi:fireplace).",
-          "on_code": "Code sent when the switch is turned on.",
-          "off_code": "Code sent when the switch is turned off."
+          "on_code": "Command sent when the switch is turned on.",
+          "off_code": "Command sent when the switch is turned off."
         }
       },
       "remove_switch": {
@@ -191,7 +131,7 @@
         "title": "Edit switch",
         "description": "Edit this switch, or choose Done to go back.",
         "menu_options": {
-          "edit_switch_details": "Edit name, icon, and codes",
+          "edit_switch_details": "Edit name, icon, and commands",
           "done_edit": "Done"
         }
       },
@@ -200,53 +140,53 @@
         "data": {
           "name": "Name",
           "icon": "Icon",
-          "on_code": "On code",
-          "off_code": "Off code"
+          "on_code": "On command",
+          "off_code": "Off command"
         },
         "data_description": {
           "name": "Switch name (e.g. Power).",
           "icon": "Optional icon for the switch (e.g. mdi:fireplace).",
-          "on_code": "Code sent when the switch is turned on.",
-          "off_code": "Code sent when the switch is turned off."
+          "on_code": "Command sent when the switch is turned on.",
+          "off_code": "Command sent when the switch is turned off."
         }
       },
       "add_light": {
         "title": "Add light — power",
-        "description": "Set the power codes. For a toggle-only appliance, pick the same code for on and off. Next you'll add brightness levels.",
+        "description": "Set the power commands. For a toggle-only appliance, pick the same command for on and off. Next you'll add brightness levels.",
         "data": {
           "name": "Name",
           "icon": "Icon",
-          "on_code": "On code",
-          "off_code": "Off code"
+          "on_code": "On command",
+          "off_code": "Off command"
         },
         "data_description": {
           "name": "Light name (e.g. Counter Lights).",
           "icon": "Optional icon for the light.",
-          "on_code": "Code sent to turn the light on.",
-          "off_code": "Code sent to turn the light off."
+          "on_code": "Command sent to turn the light on.",
+          "off_code": "Command sent to turn the light off."
         }
       },
       "edit_light_details": {
         "title": "Edit light — power",
-        "description": "Update the power codes. Next you'll manage brightness levels.",
+        "description": "Update the power commands. Next you'll manage brightness levels.",
         "data": {
           "name": "Name",
           "icon": "Icon",
-          "on_code": "On code",
-          "off_code": "Off code"
+          "on_code": "On command",
+          "off_code": "Off command"
         },
         "data_description": {
           "name": "Light name (e.g. Counter Lights).",
           "icon": "Optional icon for the light.",
-          "on_code": "Code sent to turn the light on.",
-          "off_code": "Code sent to turn the light off."
+          "on_code": "Command sent to turn the light on.",
+          "off_code": "Command sent to turn the light off."
         }
       },
       "manage_light": {
         "title": "Edit light",
-        "description": "Edit the power codes or brightness levels. The slider snaps to the nearest level. Choose Done when finished.",
+        "description": "Edit the power commands or brightness levels. The slider snaps to the nearest level. Choose Done when finished.",
         "menu_options": {
-          "edit_light_details": "Edit power codes",
+          "edit_light_details": "Edit power commands",
           "add_level": "Add brightness level",
           "remove_level": "Remove brightness level",
           "done_edit": "Done"
@@ -255,12 +195,12 @@
       "add_level": {
         "title": "Add brightness level",
         "data": {
-          "code_id": "Code",
+          "code_id": "Command",
           "percent": "Brightness %"
         },
         "data_description": {
-          "code_id": "The code that sets this brightness level.",
-          "percent": "The brightness this code represents (1-100)."
+          "code_id": "The learned command that sets this brightness level.",
+          "percent": "The brightness this command represents (1-100)."
         }
       },
       "remove_level": {
@@ -283,17 +223,17 @@
       },
       "add_climate": {
         "title": "Add climate",
-        "description": "Enable heat, cool, or both. For a toggle-only unit, use the same code for the mode and off. Enter one target temperature per line; the dial snaps to the nearest and steps with up/down.",
+        "description": "Enable heat, cool, or both. For a toggle-only unit, use the same command for the mode and off. Enter one target temperature per line; the dial snaps to the nearest and steps with up/down.",
         "data": {
           "name": "Name",
           "icon": "Icon",
           "heat": "Enable heat",
           "cool": "Enable cool",
-          "heat_code": "Heat mode code",
-          "cool_code": "Cool mode code",
-          "off_code": "Off code",
-          "up_code": "Temperature up code",
-          "down_code": "Temperature down code",
+          "heat_code": "Heat mode command",
+          "cool_code": "Cool mode command",
+          "off_code": "Off command",
+          "up_code": "Temperature up command",
+          "down_code": "Temperature down command",
           "temperatures": "Temperatures (one per line)",
           "target_temp": "Initial target temperature",
           "temp_sensor": "Current temperature sensor"
@@ -303,11 +243,11 @@
           "icon": "Optional icon for the climate entity.",
           "heat": "Offer a heat mode.",
           "cool": "Offer a cool mode.",
-          "heat_code": "Code sent to enter heat mode (required if heat is enabled).",
-          "cool_code": "Code sent to enter cool mode (required if cool is enabled).",
-          "off_code": "Code sent to turn the unit off (may equal a mode code for toggle units).",
-          "up_code": "Code sent to move up one temperature step.",
-          "down_code": "Code sent to move down one temperature step.",
+          "heat_code": "Command sent to enter heat mode (required if heat is enabled).",
+          "cool_code": "Command sent to enter cool mode (required if cool is enabled).",
+          "off_code": "Command sent to turn the unit off (may equal a mode command for toggle units).",
+          "up_code": "Command sent to move up one temperature step.",
+          "down_code": "Command sent to move down one temperature step.",
           "temperatures": "One selectable target temperature per line. They need not be evenly spaced.",
           "target_temp": "Optional starting target. Defaults to the lowest temperature.",
           "temp_sensor": "Optional sensor for the real current temperature. If unset, the current temperature mirrors the target."
@@ -323,7 +263,7 @@
         "title": "Edit climate",
         "description": "Edit this climate, or choose Done to go back.",
         "menu_options": {
-          "edit_climate_details": "Edit modes, codes, and temperatures",
+          "edit_climate_details": "Edit modes, commands, and temperatures",
           "done_edit": "Done"
         }
       },
@@ -334,11 +274,11 @@
           "icon": "Icon",
           "heat": "Enable heat",
           "cool": "Enable cool",
-          "heat_code": "Heat mode code",
-          "cool_code": "Cool mode code",
-          "off_code": "Off code",
-          "up_code": "Temperature up code",
-          "down_code": "Temperature down code",
+          "heat_code": "Heat mode command",
+          "cool_code": "Cool mode command",
+          "off_code": "Off command",
+          "up_code": "Temperature up command",
+          "down_code": "Temperature down command",
           "temperatures": "Temperatures (one per line)",
           "target_temp": "Initial target temperature",
           "temp_sensor": "Current temperature sensor"
@@ -348,11 +288,11 @@
           "icon": "Optional icon for the climate entity.",
           "heat": "Offer a heat mode.",
           "cool": "Offer a cool mode.",
-          "heat_code": "Code sent to enter heat mode (required if heat is enabled).",
-          "cool_code": "Code sent to enter cool mode (required if cool is enabled).",
-          "off_code": "Code sent to turn the unit off (may equal a mode code for toggle units).",
-          "up_code": "Code sent to move up one temperature step.",
-          "down_code": "Code sent to move down one temperature step.",
+          "heat_code": "Command sent to enter heat mode (required if heat is enabled).",
+          "cool_code": "Command sent to enter cool mode (required if cool is enabled).",
+          "off_code": "Command sent to turn the unit off (may equal a mode command for toggle units).",
+          "up_code": "Command sent to move up one temperature step.",
+          "down_code": "Command sent to move down one temperature step.",
           "temperatures": "One selectable target temperature per line. They need not be evenly spaced.",
           "target_temp": "Optional starting target. Defaults to the lowest temperature.",
           "temp_sensor": "Optional sensor for the real current temperature. If unset, the current temperature mirrors the target."
@@ -367,7 +307,7 @@
     },
     "error": {
       "name_required": "A name is required.",
-      "code_required": "An IR/RF code is required.",
+      "code_required": "A command is required.",
       "need_mode": "Enable at least one of heat or cool.",
       "invalid_temps": "Each line must be a number (one temperature per line).",
       "temps_required": "Enter at least one temperature."

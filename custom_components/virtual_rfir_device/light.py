@@ -1,9 +1,10 @@
-"""Light platform: optimistic dimmable lights built from IR/RF codes.
+"""Light platform: optimistic dimmable lights built from learned commands.
 
-An IR light exposes a set of *absolute* brightness codes (e.g. 10%, 20%, ...,
+An IR light exposes a set of *absolute* brightness commands (e.g. 10%, 20%, ...,
 100%). The brightness slider snaps to the nearest configured level and sends
-that code. Power is handled by an on/off (or toggle) code, and brightness codes
-are only sent once the light is on, since the appliance requires power first.
+that command. Power is handled by an on/off (or toggle) command, and brightness
+commands are only sent once the light is on, since the appliance requires power
+first.
 
 Like the other entities here, lights are assumed-state: Home Assistant only
 remembers the last command it sent and can drift if the physical remote is used.
@@ -27,7 +28,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
     CONF_CODE_ID,
-    CONF_CODES,
+    CONF_DEVICE,
     CONF_ICON,
     CONF_ID,
     CONF_LEVELS,
@@ -38,7 +39,7 @@ from .const import (
     CONF_REMOTE,
     DOMAIN,
 )
-from .helpers import async_send_code, resolve_code_entry
+from .helpers import async_send_code
 
 
 def _pct_to_brightness(percent: int) -> int:
@@ -57,11 +58,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Create a light entity for each configured light."""
-    codes = entry.options.get(CONF_CODES, [])
     lights = entry.options.get(CONF_LIGHTS, [])
-    async_add_entities(
-        VirtualRfirLight(entry, light, codes) for light in lights
-    )
+    async_add_entities(VirtualRfirLight(entry, light) for light in lights)
 
 
 class VirtualRfirLight(LightEntity, RestoreEntity):
@@ -70,24 +68,21 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_assumed_state = True
 
-    def __init__(
-        self,
-        entry: ConfigEntry,
-        light: dict[str, Any],
-        codes: list[dict[str, Any]],
-    ) -> None:
+    def __init__(self, entry: ConfigEntry, light: dict[str, Any]) -> None:
         """Initialize the light from a stored light definition."""
         self._remote_entity_id: str = entry.data[CONF_REMOTE]
-        self._on_code = resolve_code_entry(codes, light.get(CONF_ON_CODE))
-        self._off_code = resolve_code_entry(codes, light.get(CONF_OFF_CODE))
+        self._device: str | None = entry.data.get(CONF_DEVICE)
+        self._on_command: str | None = light.get(CONF_ON_CODE)
+        self._off_command: str | None = light.get(CONF_OFF_CODE)
 
-        # Resolve and sort the brightness levels: list of (percent, code entry).
-        levels: list[tuple[int, dict[str, Any]]] = []
+        # Resolve and sort the brightness levels: list of (percent, command),
+        # each command learned within the entry's device group.
+        levels: list[tuple[int, str]] = []
         for level in light.get(CONF_LEVELS, []):
-            code = resolve_code_entry(codes, level.get(CONF_CODE_ID))
+            command = level.get(CONF_CODE_ID)
             percent = level.get(CONF_PERCENT)
-            if code is not None and percent is not None:
-                levels.append((int(percent), code))
+            if command is not None and percent is not None:
+                levels.append((int(percent), command))
         levels.sort(key=lambda item: item[0])
         self._levels = levels
 
@@ -117,24 +112,28 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
             if brightness is not None:
                 self._attr_brightness = int(brightness)
 
-    def _nearest_level(self, brightness: int) -> tuple[int, dict[str, Any]]:
-        """Return the (percent, code entry) level closest to a brightness."""
+    def _nearest_level(self, brightness: int) -> tuple[int, str]:
+        """Return the (percent, command) level closest to a brightness."""
         target = _brightness_to_pct(brightness)
         return min(self._levels, key=lambda item: abs(item[0] - target))
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Power on (if needed) and optionally set the nearest brightness.
 
-        The appliance needs power before brightness codes take effect, so the
-        on code is always sent first when the light was off.
+        The appliance needs power before brightness commands take effect, so the
+        on command is always sent first when the light was off.
         """
         if not self._attr_is_on:
-            await async_send_code(self.hass, self._remote_entity_id, self._on_code)
+            await async_send_code(
+                self.hass, self._remote_entity_id, self._on_command, self._device
+            )
         self._attr_is_on = True
 
         if ATTR_BRIGHTNESS in kwargs and self._levels:
-            percent, code = self._nearest_level(kwargs[ATTR_BRIGHTNESS])
-            await async_send_code(self.hass, self._remote_entity_id, code)
+            percent, command = self._nearest_level(kwargs[ATTR_BRIGHTNESS])
+            await async_send_code(
+                self.hass, self._remote_entity_id, command, self._device
+            )
             self._attr_brightness = _pct_to_brightness(percent)
         elif self._attr_brightness is None and self._levels:
             # No brightness known yet; display the highest configured level.
@@ -143,8 +142,10 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Send the off code and optimistically mark the light off."""
+        """Send the off command and optimistically mark the light off."""
         if self._attr_is_on:
-            await async_send_code(self.hass, self._remote_entity_id, self._off_code)
+            await async_send_code(
+                self.hass, self._remote_entity_id, self._off_command, self._device
+            )
         self._attr_is_on = False
         self.async_write_ha_state()

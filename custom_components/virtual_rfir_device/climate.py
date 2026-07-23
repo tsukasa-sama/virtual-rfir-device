@@ -38,7 +38,7 @@ from .const import (
     CONF_CLIMATES,
     CONF_COOL,
     CONF_COOL_CODE,
-    CONF_CODES,
+    CONF_DEVICE,
     CONF_DOWN_CODE,
     CONF_HEAT,
     CONF_HEAT_CODE,
@@ -52,7 +52,7 @@ from .const import (
     CONF_UP_CODE,
     DOMAIN,
 )
-from .helpers import async_send_code, resolve_code_entry
+from .helpers import async_send_code
 
 
 async def async_setup_entry(
@@ -61,11 +61,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Create a climate entity for each configured climate."""
-    codes = entry.options.get(CONF_CODES, [])
     climates = entry.options.get(CONF_CLIMATES, [])
-    async_add_entities(
-        VirtualRfirClimate(entry, climate, codes) for climate in climates
-    )
+    async_add_entities(VirtualRfirClimate(entry, climate) for climate in climates)
 
 
 class VirtualRfirClimate(ClimateEntity, RestoreEntity):
@@ -76,19 +73,16 @@ class VirtualRfirClimate(ClimateEntity, RestoreEntity):
     # Opt in to the modern turn_on/turn_off behavior (no legacy shim).
     _enable_turn_on_off_backwards_compatibility = False
 
-    def __init__(
-        self,
-        entry: ConfigEntry,
-        climate: dict[str, Any],
-        codes: list[dict[str, Any]],
-    ) -> None:
+    def __init__(self, entry: ConfigEntry, climate: dict[str, Any]) -> None:
         """Initialize the climate entity from a stored definition."""
         self._remote_entity_id: str = entry.data[CONF_REMOTE]
-        self._off_code = resolve_code_entry(codes, climate.get(CONF_OFF_CODE))
-        self._heat_code = resolve_code_entry(codes, climate.get(CONF_HEAT_CODE))
-        self._cool_code = resolve_code_entry(codes, climate.get(CONF_COOL_CODE))
-        self._up_code = resolve_code_entry(codes, climate.get(CONF_UP_CODE))
-        self._down_code = resolve_code_entry(codes, climate.get(CONF_DOWN_CODE))
+        self._device: str | None = entry.data.get(CONF_DEVICE)
+        # Each mode/step is the name of a command learned in the device group.
+        self._off_command: str | None = climate.get(CONF_OFF_CODE)
+        self._heat_command: str | None = climate.get(CONF_HEAT_CODE)
+        self._cool_command: str | None = climate.get(CONF_COOL_CODE)
+        self._up_command: str | None = climate.get(CONF_UP_CODE)
+        self._down_command: str | None = climate.get(CONF_DOWN_CODE)
         self._temp_sensor: str | None = climate.get(CONF_TEMP_SENSOR)
 
         # Sorted, de-duplicated list of selectable target temperatures.
@@ -169,12 +163,12 @@ class VirtualRfirClimate(ClimateEntity, RestoreEntity):
         """Switch mode, sending the code for the requested mode."""
         if hvac_mode == self._attr_hvac_mode or hvac_mode not in self._attr_hvac_modes:
             return
-        code = {
-            HVACMode.HEAT: self._heat_code,
-            HVACMode.COOL: self._cool_code,
-            HVACMode.OFF: self._off_code,
+        command = {
+            HVACMode.HEAT: self._heat_command,
+            HVACMode.COOL: self._cool_command,
+            HVACMode.OFF: self._off_command,
         }.get(hvac_mode)
-        await async_send_code(self.hass, self._remote_entity_id, code)
+        await async_send_code(self.hass, self._remote_entity_id, command, self._device)
         self._attr_hvac_mode = hvac_mode
         self.async_write_ha_state()
 
@@ -204,9 +198,11 @@ class VirtualRfirClimate(ClimateEntity, RestoreEntity):
         )
         delta = self._temps.index(new_value) - self._temps.index(current_value)
 
-        code = self._up_code if delta > 0 else self._down_code
+        command = self._up_command if delta > 0 else self._down_command
         for _ in range(abs(delta)):
-            await async_send_code(self.hass, self._remote_entity_id, code)
+            await async_send_code(
+                self.hass, self._remote_entity_id, command, self._device
+            )
 
         self._attr_target_temperature = new_value
         self.async_write_ha_state()

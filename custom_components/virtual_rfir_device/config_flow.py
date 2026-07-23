@@ -14,7 +14,7 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.const import CONF_NAME
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
@@ -24,10 +24,7 @@ from homeassistant.helpers.storage import Store
 from .const import (
     CONF_BUTTONS,
     CONF_CLIMATES,
-    CONF_CODE,
     CONF_CODE_ID,
-    CONF_CODES,
-    CONF_COMMAND,
     CONF_COOL,
     CONF_COOL_CODE,
     CONF_DEVICE,
@@ -51,11 +48,39 @@ from .const import (
 )
 
 
-# Field key for the import multi-select, and the delimiter used to pack a
-# (device, command) pair into a single select value (0x1f = ASCII unit
-# separator, which won't appear in a learned command name).
-CONF_SELECTION = "selection"
-_IMPORT_DELIM = "\x1f"
+async def _async_load_learned(
+    hass: HomeAssistant, remote_entity_id: str
+) -> dict[str, Any]:
+    """Load learned commands for a remote from the Broadlink codes store.
+
+    Returns ``{device: {command: code}}`` (the store's ``data`` payload) or an
+    empty dict if the remote isn't a Broadlink (or has no learned commands /
+    can't be read).
+    """
+    entity_registry = er.async_get(hass)
+    remote_entry = entity_registry.async_get(remote_entity_id)
+    if remote_entry is None or remote_entry.device_id is None:
+        return {}
+
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get(remote_entry.device_id)
+    if device is None:
+        return {}
+
+    mac = next(
+        (
+            value.replace(":", "").lower()
+            for conn_type, value in device.connections
+            if conn_type == CONNECTION_NETWORK_MAC
+        ),
+        None,
+    )
+    if mac is None:
+        return {}
+
+    store: Store = Store(hass, 1, f"broadlink_remote_{mac}_codes")
+    data = await store.async_load()
+    return data if isinstance(data, dict) else {}
 
 
 def _as_options(items: list[dict[str, Any]]) -> list[selector.SelectOptionDict]:
@@ -86,6 +111,11 @@ class VirtualRfirDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        """Hold the first step's answers while collecting the second."""
+        self._name: str = ""
+        self._remote: str = ""
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -97,13 +127,9 @@ class VirtualRfirDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
             if not name:
                 errors[CONF_NAME] = "name_required"
             else:
-                return self.async_create_entry(
-                    title=name,
-                    data={
-                        CONF_NAME: name,
-                        CONF_REMOTE: user_input[CONF_REMOTE],
-                    },
-                )
+                self._name = name
+                self._remote = user_input[CONF_REMOTE]
+                return await self.async_step_appliance()
 
         schema = vol.Schema(
             {
@@ -120,6 +146,43 @@ class VirtualRfirDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_appliance(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pick which learned-command group on the remote this device controls.
+
+        The remote's codes store groups commands under top-level "devices"
+        (e.g. ``great_room_fireplace``). This binds the virtual device to one
+        group so only its commands are offered when building controls.
+        """
+        learned = await _async_load_learned(self.hass, self._remote)
+        if not learned:
+            return self.async_abort(reason="no_commands")
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title=self._name,
+                data={
+                    CONF_NAME: self._name,
+                    CONF_REMOTE: self._remote,
+                    CONF_DEVICE: user_input[CONF_DEVICE],
+                },
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_DEVICE): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(value=device, label=device)
+                            for device in learned
+                        ]
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="appliance", data_schema=schema)
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
@@ -128,23 +191,25 @@ class VirtualRfirDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class VirtualRfirDeviceOptionsFlow(OptionsFlow):
-    """Manage the codes, buttons, and switches of a virtual RF/IR device.
+    """Manage the buttons, switches, lights, and climates of a virtual device.
 
-    Codes are a data-only library of IR/RF codes; they create no entities on
-    their own. Buttons and switches are the entities, composed by referencing
-    codes.
+    Entities are composed by referencing commands *learned on the remote*. The
+    learned commands are read live from the remote's store each time a picker is
+    shown, and an entity stores only a pointer to a command (a packed
+    ``device``/``command`` token) — never a copy of the code. Sending is by name,
+    so re-learning a command stays in sync with no reconfiguration here.
     """
 
     def __init__(self) -> None:
         """Initialize the options flow with lazily-loaded working copies."""
-        self._codes: list[dict[str, Any]] | None = None
         self._buttons: list[dict[str, Any]] | None = None
         self._switches: list[dict[str, Any]] | None = None
         self._lights: list[dict[str, Any]] | None = None
         self._climates: list[dict[str, Any]] | None = None
-        # Learned commands available on the remote, as {device: {command: code}}.
-        # None until first loaded; {} if the remote has none / can't be read.
-        self._learned: dict[str, Any] | None = None
+        # Learned commands in the entry's device group, as {command: code}.
+        # Refreshed from the remote's store whenever a picker is shown; {} if the
+        # group is gone / the remote can't be read.
+        self._learned: dict[str, Any] = {}
         # Id of the item currently being edited (set by an edit-select step),
         # also used as the "current light" while editing its brightness levels.
         self._edit_id: str | None = None
@@ -152,8 +217,6 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     def _load(self) -> None:
         """Load the current options into editable working copies once."""
         options = self.config_entry.options
-        if self._codes is None:
-            self._codes = [dict(item) for item in options.get(CONF_CODES, [])]
         if self._buttons is None:
             self._buttons = [dict(item) for item in options.get(CONF_BUTTONS, [])]
         if self._switches is None:
@@ -167,339 +230,69 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         if self._climates is None:
             self._climates = [dict(item) for item in options.get(CONF_CLIMATES, [])]
 
-    def _code_options(self) -> list[selector.SelectOptionDict]:
-        """Return the code library as select options."""
-        assert self._codes is not None
-        return _as_options(self._codes)
+    async def _async_refresh_learned(self) -> None:
+        """Re-read the entry's device-group commands so pickers are current."""
+        full = await _async_load_learned(
+            self.hass, self.config_entry.data[CONF_REMOTE]
+        )
+        device = self.config_entry.data.get(CONF_DEVICE)
+        self._learned = full.get(device, {}) if device else {}
 
-    def _code_name(self, code_id: str) -> str:
-        """Return the display name of a code id, or a placeholder."""
-        code = _find_by_id(self._codes or [], code_id)
-        return code[CONF_NAME] if code else "?"
+    def _command_options(self) -> list[selector.SelectOptionDict]:
+        """Return the device group's learned commands as live select options."""
+        return [
+            selector.SelectOptionDict(value=command, label=command)
+            for command in self._learned
+        ]
+
+    def _command_select(self) -> selector.SelectSelector:
+        """Return a select selector over the device group's live commands."""
+        return selector.SelectSelector(
+            selector.SelectSelectorConfig(options=self._command_options())
+        )
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Show the top-level menu for managing the device's contents."""
         self._load()
-        assert self._codes is not None
         assert self._buttons is not None
         assert self._switches is not None
         assert self._lights is not None
+        assert self._climates is not None
 
-        if self._learned is None:
-            self._learned = await self._async_load_learned()
+        await self._async_refresh_learned()
 
-        menu_options = ["add_code", "add_reference"]
+        menu_options: list[str] = []
+        # Entities reference learned commands, so require some to exist first.
         if self._learned:
-            menu_options.append("import_codes")
-        if self._codes:
-            menu_options += ["edit_code", "remove_code"]
-            # Entities reference codes, so require codes first.
             menu_options.append("add_button")
         if self._buttons:
             menu_options += ["edit_button", "remove_button"]
-        if self._codes:
+        if self._learned:
             menu_options.append("add_switch")
         if self._switches:
             menu_options += ["edit_switch", "remove_switch"]
-        if self._codes:
+        if self._learned:
             menu_options.append("add_light")
         if self._lights:
             menu_options += ["edit_light", "remove_light"]
-        if self._codes:
+        if self._learned:
             menu_options.append("add_climate")
         if self._climates:
             menu_options += ["edit_climate", "remove_climate"]
         menu_options.append("finish")
         return self.async_show_menu(step_id="init", menu_options=menu_options)
 
-    # --- Codes -------------------------------------------------------------
-
-    async def async_step_add_code(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Add an IR/RF code to the library (creates no entity)."""
-        self._load()
-        assert self._codes is not None
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            name = user_input[CONF_NAME].strip()
-            code = user_input[CONF_CODE].strip()
-            if not name:
-                errors[CONF_NAME] = "name_required"
-            elif not code:
-                errors[CONF_CODE] = "code_required"
-            else:
-                self._codes.append(
-                    {CONF_ID: uuid.uuid4().hex, CONF_NAME: name, CONF_CODE: code}
-                )
-                return await self.async_step_init()
-
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_NAME): selector.TextSelector(),
-                vol.Required(CONF_CODE): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
-            }
-        )
-        return self.async_show_form(
-            step_id="add_code",
-            data_schema=self.add_suggested_values_to_schema(schema, user_input),
-            errors=errors,
-        )
-
-    async def async_step_add_reference(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Add a code that references a command already learned on the remote.
-
-        Works with any remote whose ``send_command`` accepts a command name
-        (Broadlink, Xiaomi, SwitchBot, ...). Leave the device blank for remotes
-        that don't group commands under a device.
-        """
-        self._load()
-        assert self._codes is not None
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            name = user_input[CONF_NAME].strip()
-            command = user_input[CONF_COMMAND].strip()
-            if not name:
-                errors[CONF_NAME] = "name_required"
-            elif not command:
-                errors[CONF_COMMAND] = "code_required"
-            else:
-                reference = {
-                    CONF_ID: uuid.uuid4().hex,
-                    CONF_NAME: name,
-                    CONF_COMMAND: command,
-                }
-                if device := (user_input.get(CONF_DEVICE) or "").strip():
-                    reference[CONF_DEVICE] = device
-                self._codes.append(reference)
-                return await self.async_step_init()
-
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_NAME): selector.TextSelector(),
-                vol.Optional(CONF_DEVICE): selector.TextSelector(),
-                vol.Required(CONF_COMMAND): selector.TextSelector(),
-            }
-        )
-        return self.async_show_form(
-            step_id="add_reference",
-            data_schema=self.add_suggested_values_to_schema(schema, user_input),
-            errors=errors,
-        )
-
-    async def _async_load_learned(self) -> dict[str, Any]:
-        """Load learned commands for the configured remote (Broadlink store).
-
-        Returns ``{device: {command: code}}`` or an empty dict if the remote
-        isn't a Broadlink (or has no learned commands / can't be read).
-        """
-        remote_entity_id = self.config_entry.data[CONF_REMOTE]
-        entity_registry = er.async_get(self.hass)
-        remote_entry = entity_registry.async_get(remote_entity_id)
-        if remote_entry is None or remote_entry.device_id is None:
-            return {}
-
-        device_registry = dr.async_get(self.hass)
-        device = device_registry.async_get(remote_entry.device_id)
-        if device is None:
-            return {}
-
-        mac = next(
-            (
-                value.replace(":", "").lower()
-                for conn_type, value in device.connections
-                if conn_type == CONNECTION_NETWORK_MAC
-            ),
-            None,
-        )
-        if mac is None:
-            return {}
-
-        store: Store = Store(self.hass, 1, f"broadlink_remote_{mac}_codes")
-        data = await store.async_load()
-        return data if isinstance(data, dict) else {}
-
-    async def async_step_import_codes(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Import learned commands from the remote as reference codes."""
-        self._load()
-        assert self._codes is not None
-        learned = self._learned or {}
-
-        if user_input is not None:
-            existing = {
-                (code.get(CONF_DEVICE), code.get(CONF_COMMAND))
-                for code in self._codes
-                if CONF_COMMAND in code
-            }
-            for token in user_input.get(CONF_SELECTION, []):
-                device, command = token.split(_IMPORT_DELIM, 1)
-                if (device, command) in existing:
-                    continue
-                self._codes.append(
-                    {
-                        CONF_ID: uuid.uuid4().hex,
-                        CONF_NAME: command,
-                        CONF_DEVICE: device,
-                        CONF_COMMAND: command,
-                    }
-                )
-            return await self.async_step_init()
-
-        options = [
-            selector.SelectOptionDict(
-                value=f"{device}{_IMPORT_DELIM}{command}",
-                label=f"{device}: {command}",
-            )
-            for device, commands in learned.items()
-            for command in commands
-        ]
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_SELECTION): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=options,
-                        multiple=True,
-                        mode=selector.SelectSelectorMode.LIST,
-                    )
-                )
-            }
-        )
-        return self.async_show_form(step_id="import_codes", data_schema=schema)
-
-    async def async_step_remove_code(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Remove one or more codes from the library."""
-        self._load()
-        assert self._codes is not None
-
-        if user_input is not None:
-            to_remove = set(user_input.get(CONF_CODES, []))
-            self._codes = [
-                code for code in self._codes if code[CONF_ID] not in to_remove
-            ]
-            return await self.async_step_init()
-
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_CODES): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=self._code_options(),
-                        multiple=True,
-                        mode=selector.SelectSelectorMode.LIST,
-                    )
-                )
-            }
-        )
-        return self.async_show_form(step_id="remove_code", data_schema=schema)
-
-    async def async_step_edit_code(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Choose a code to edit, then open its hub."""
-        self._load()
-        assert self._codes is not None
-
-        if user_input is not None:
-            self._edit_id = user_input[CONF_ID]
-            return await self.async_step_manage_code()
-
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_ID): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=self._code_options())
-                )
-            }
-        )
-        return self.async_show_form(step_id="edit_code", data_schema=schema)
-
-    async def async_step_manage_code(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Hub for the selected code."""
-        if _find_by_id(self._codes or [], self._edit_id) is None:
-            return await self.async_step_init()
-        return self.async_show_menu(
-            step_id="manage_code",
-            menu_options=["edit_code_details", "done_edit"],
-        )
-
-    async def async_step_edit_code_details(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Edit the selected code.
-
-        Raw codes edit name + Base64; reference codes (imported from a remote)
-        edit name + the learned device/command they point at.
-        """
-        self._load()
-        assert self._codes is not None
-        code = _find_by_id(self._codes, self._edit_id)
-        if code is None:
-            return await self.async_step_init()
-
-        is_reference = CONF_COMMAND in code
-        payload_key = CONF_COMMAND if is_reference else CONF_CODE
-
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            name = user_input[CONF_NAME].strip()
-            payload = user_input[payload_key].strip()
-            if not name:
-                errors[CONF_NAME] = "name_required"
-            elif not payload:
-                errors[payload_key] = "code_required"
-            else:
-                code[CONF_NAME] = name
-                code[payload_key] = payload
-                if is_reference:
-                    _set_optional(code, CONF_DEVICE, user_input.get(CONF_DEVICE))
-                return await self.async_step_manage_code()
-
-        if is_reference:
-            schema = vol.Schema(
-                {
-                    vol.Required(CONF_NAME): selector.TextSelector(),
-                    vol.Optional(CONF_DEVICE): selector.TextSelector(),
-                    vol.Required(CONF_COMMAND): selector.TextSelector(),
-                }
-            )
-        else:
-            schema = vol.Schema(
-                {
-                    vol.Required(CONF_NAME): selector.TextSelector(),
-                    vol.Required(CONF_CODE): selector.TextSelector(
-                        selector.TextSelectorConfig(multiline=True)
-                    ),
-                }
-            )
-        return self.async_show_form(
-            step_id="edit_code_details",
-            data_schema=self.add_suggested_values_to_schema(
-                schema, user_input if user_input is not None else code
-            ),
-            errors=errors,
-        )
-
     # --- Buttons -----------------------------------------------------------
 
     async def async_step_add_button(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Add a button entity that sends a code from the library."""
+        """Add a button entity that sends a learned command."""
         self._load()
-        assert self._codes is not None
         assert self._buttons is not None
+        await self._async_refresh_learned()
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -521,9 +314,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             {
                 vol.Required(CONF_NAME): selector.TextSelector(),
                 vol.Optional(CONF_ICON): selector.IconSelector(),
-                vol.Required(CONF_CODE_ID): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=self._code_options())
-                ),
+                vol.Required(CONF_CODE_ID): self._command_select(),
             }
         )
         return self.async_show_form(
@@ -593,10 +384,10 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_edit_button_details(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Edit the selected button's name, icon, and code."""
+        """Edit the selected button's name, icon, and command."""
         self._load()
-        assert self._codes is not None
         assert self._buttons is not None
+        await self._async_refresh_learned()
         button = _find_by_id(self._buttons, self._edit_id)
         if button is None:
             return await self.async_step_init()
@@ -616,9 +407,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             {
                 vol.Required(CONF_NAME): selector.TextSelector(),
                 vol.Optional(CONF_ICON): selector.IconSelector(),
-                vol.Required(CONF_CODE_ID): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=self._code_options())
-                ),
+                vol.Required(CONF_CODE_ID): self._command_select(),
             }
         )
         return self.async_show_form(
@@ -631,17 +420,29 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
 
     # --- Switches ----------------------------------------------------------
 
+    def _power_schema(self) -> vol.Schema:
+        """Return the schema for a name, icon, and on/off command pair."""
+        command_select = self._command_select()
+        return vol.Schema(
+            {
+                vol.Required(CONF_NAME): selector.TextSelector(),
+                vol.Optional(CONF_ICON): selector.IconSelector(),
+                vol.Required(CONF_ON_CODE): command_select,
+                vol.Required(CONF_OFF_CODE): command_select,
+            }
+        )
+
     async def async_step_add_switch(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Add an optimistic switch built from existing codes.
+        """Add an optimistic switch built from learned commands.
 
-        Pick an ``on`` code and an ``off`` code. For a toggle-only appliance,
-        choose the same code for both.
+        Pick an ``on`` command and an ``off`` command. For a toggle-only
+        appliance, choose the same command for both.
         """
         self._load()
-        assert self._codes is not None
         assert self._switches is not None
+        await self._async_refresh_learned()
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -660,20 +461,11 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                 self._switches.append(switch)
                 return await self.async_step_init()
 
-        code_select = selector.SelectSelector(
-            selector.SelectSelectorConfig(options=self._code_options())
-        )
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_NAME): selector.TextSelector(),
-                vol.Optional(CONF_ICON): selector.IconSelector(),
-                vol.Required(CONF_ON_CODE): code_select,
-                vol.Required(CONF_OFF_CODE): code_select,
-            }
-        )
         return self.async_show_form(
             step_id="add_switch",
-            data_schema=self.add_suggested_values_to_schema(schema, user_input),
+            data_schema=self.add_suggested_values_to_schema(
+                self._power_schema(), user_input
+            ),
             errors=errors,
         )
 
@@ -738,10 +530,10 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_edit_switch_details(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Edit the selected switch's name, icon, and on/off codes."""
+        """Edit the selected switch's name, icon, and on/off commands."""
         self._load()
-        assert self._codes is not None
         assert self._switches is not None
+        await self._async_refresh_learned()
         switch = _find_by_id(self._switches, self._edit_id)
         if switch is None:
             return await self.async_step_init()
@@ -758,21 +550,11 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                 _set_optional(switch, CONF_ICON, user_input.get(CONF_ICON))
                 return await self.async_step_manage_switch()
 
-        code_select = selector.SelectSelector(
-            selector.SelectSelectorConfig(options=self._code_options())
-        )
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_NAME): selector.TextSelector(),
-                vol.Optional(CONF_ICON): selector.IconSelector(),
-                vol.Required(CONF_ON_CODE): code_select,
-                vol.Required(CONF_OFF_CODE): code_select,
-            }
-        )
         return self.async_show_form(
             step_id="edit_switch_details",
             data_schema=self.add_suggested_values_to_schema(
-                schema, user_input if user_input is not None else switch
+                self._power_schema(),
+                user_input if user_input is not None else switch,
             ),
             errors=errors,
         )
@@ -784,30 +566,16 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         assert self._lights is not None
         return _find_by_id(self._lights, self._edit_id)
 
-    def _light_power_schema(self) -> vol.Schema:
-        """Return the schema for a light's name, icon, and power codes."""
-        code_select = selector.SelectSelector(
-            selector.SelectSelectorConfig(options=self._code_options())
-        )
-        return vol.Schema(
-            {
-                vol.Required(CONF_NAME): selector.TextSelector(),
-                vol.Optional(CONF_ICON): selector.IconSelector(),
-                vol.Required(CONF_ON_CODE): code_select,
-                vol.Required(CONF_OFF_CODE): code_select,
-            }
-        )
-
     async def async_step_add_light(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Add a light: set power codes, then move on to brightness levels.
+        """Add a light: set power commands, then move on to brightness levels.
 
-        For a toggle-only appliance, pick the same code for on and off.
+        For a toggle-only appliance, pick the same command for on and off.
         """
         self._load()
-        assert self._codes is not None
         assert self._lights is not None
+        await self._async_refresh_learned()
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -831,7 +599,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="add_light",
             data_schema=self.add_suggested_values_to_schema(
-                self._light_power_schema(), user_input
+                self._power_schema(), user_input
             ),
             errors=errors,
         )
@@ -839,7 +607,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_manage_light(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Hub for the selected light: power codes and brightness levels."""
+        """Hub for the selected light: power commands and brightness levels."""
         light = self._current_light()
         if light is None:
             return await self.async_step_init()
@@ -853,9 +621,9 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_add_level(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Add a brightness level (a code mapped to a percentage)."""
+        """Add a brightness level (a command mapped to a percentage)."""
         self._load()
-        assert self._codes is not None
+        await self._async_refresh_learned()
         light = self._current_light()
         if light is None:
             return await self.async_step_init()
@@ -872,9 +640,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_CODE_ID): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=self._code_options())
-                ),
+                vol.Required(CONF_CODE_ID): self._command_select(),
                 vol.Required(CONF_PERCENT): selector.NumberSelector(
                     selector.NumberSelectorConfig(
                         min=1, max=100, step=1, mode=selector.NumberSelectorMode.BOX
@@ -889,7 +655,6 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Remove one or more brightness levels from the current light."""
         self._load()
-        assert self._codes is not None
         light = self._current_light()
         if light is None:
             return await self.async_step_init()
@@ -906,7 +671,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         options = [
             selector.SelectOptionDict(
                 value=level[CONF_ID],
-                label=f"{level[CONF_PERCENT]}% — {self._code_name(level[CONF_CODE_ID])}",
+                label=f"{level[CONF_PERCENT]}% — {level.get(CONF_CODE_ID) or '?'}",
             )
             for level in light[CONF_LEVELS]
         ]
@@ -946,9 +711,9 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_edit_light_details(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Edit the light's power codes."""
+        """Edit the light's power commands."""
         self._load()
-        assert self._codes is not None
+        await self._async_refresh_learned()
         light = self._current_light()
         if light is None:
             return await self.async_step_init()
@@ -968,7 +733,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="edit_light_details",
             data_schema=self.add_suggested_values_to_schema(
-                self._light_power_schema(),
+                self._power_schema(),
                 user_input if user_input is not None else light,
             ),
             errors=errors,
@@ -1004,21 +769,19 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     # --- Climate -----------------------------------------------------------
 
     def _climate_schema(self) -> vol.Schema:
-        """Return the schema for a climate's modes, codes, and temperatures."""
-        code_select = selector.SelectSelector(
-            selector.SelectSelectorConfig(options=self._code_options())
-        )
+        """Return the schema for a climate's modes, commands, and temperatures."""
+        command_select = self._command_select()
         return vol.Schema(
             {
                 vol.Required(CONF_NAME): selector.TextSelector(),
                 vol.Optional(CONF_ICON): selector.IconSelector(),
                 vol.Optional(CONF_HEAT, default=True): selector.BooleanSelector(),
                 vol.Optional(CONF_COOL, default=False): selector.BooleanSelector(),
-                vol.Optional(CONF_HEAT_CODE): code_select,
-                vol.Optional(CONF_COOL_CODE): code_select,
-                vol.Required(CONF_OFF_CODE): code_select,
-                vol.Required(CONF_UP_CODE): code_select,
-                vol.Required(CONF_DOWN_CODE): code_select,
+                vol.Optional(CONF_HEAT_CODE): command_select,
+                vol.Optional(CONF_COOL_CODE): command_select,
+                vol.Required(CONF_OFF_CODE): command_select,
+                vol.Required(CONF_UP_CODE): command_select,
+                vol.Required(CONF_DOWN_CODE): command_select,
                 vol.Required(CONF_TEMPERATURES): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),
@@ -1115,14 +878,14 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_add_climate(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Add a climate (heat and/or cool) built from codes.
+        """Add a climate (heat and/or cool) built from learned commands.
 
-        Enable heat, cool, or both. For a toggle-only unit, the mode code and
-        the off code can be the same.
+        Enable heat, cool, or both. For a toggle-only unit, the mode command and
+        the off command can be the same.
         """
         self._load()
-        assert self._codes is not None
         assert self._climates is not None
+        await self._async_refresh_learned()
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -1175,10 +938,10 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_edit_climate_details(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Edit the selected climate's codes and temperature range."""
+        """Edit the selected climate's commands and temperature range."""
         self._load()
-        assert self._codes is not None
         assert self._climates is not None
+        await self._async_refresh_learned()
         climate = _find_by_id(self._climates, self._edit_id)
         if climate is None:
             return await self.async_step_init()
@@ -1248,7 +1011,6 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         self._load()
         return self.async_create_entry(
             data={
-                CONF_CODES: self._codes,
                 CONF_BUTTONS: self._buttons,
                 CONF_SWITCHES: self._switches,
                 CONF_LIGHTS: self._lights,

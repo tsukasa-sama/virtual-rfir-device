@@ -6,9 +6,13 @@ DOMAIN = "virtual_rfir_device"
 
 # Config entry data keys
 CONF_REMOTE = "remote"
+# The learned-command group (a Broadlink "device", i.e. a top-level key in the
+# remote's codes store) this virtual device represents. Chosen at setup; only
+# this group's commands are offered when building controls, and it's passed as
+# the ``device`` argument when transmitting.
+CONF_DEVICE = "device"
 
 # Options keys (top-level lists)
-CONF_CODES = "codes"
 CONF_BUTTONS = "buttons"
 CONF_SWITCHES = "switches"
 CONF_LIGHTS = "lights"
@@ -18,17 +22,9 @@ CONF_CLIMATES = "climates"
 CONF_ID = "id"
 CONF_ICON = "icon"
 
-# Code-library entry keys.
-# A code is either a raw Base64 payload (CONF_CODE) or a reference to a
-# learned Broadlink command (CONF_DEVICE + CONF_COMMAND).
-CONF_CODE = "code"
-CONF_DEVICE = "device"
-CONF_COMMAND = "command"
-
-# Button entry keys
+# Control command keys. Each holds the *name* of a command learned on the remote
+# within the entry's selected device group; it's transmitted by that name.
 CONF_CODE_ID = "code_id"
-
-# Switch and light power keys
 CONF_ON_CODE = "on_code"
 CONF_OFF_CODE = "off_code"
 
