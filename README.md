@@ -36,7 +36,9 @@ Early development. Current capability:
     climate dial), or **none** (on/off only). Brightness is inert while the
     light is off — adjusting it snaps back; turn the light on first. A power-on
     option decides whether the light resumes its last brightness or drives to
-    full when switched on.
+    full when switched on. Any light can also expose **effects** — named
+    commands (colors, scenes, ...) shown as the light's effect list; selecting
+    one turns the light on and sends that command.
   - **Climate** — optimistic heaters/coolers. A mode command per enabled mode
     (heat and/or cool) plus relative temperature up/down commands; the
     target-temp dial steps by firing up/down. Optionally link a sensor for the

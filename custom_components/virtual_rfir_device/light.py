@@ -23,8 +23,10 @@ from typing import Any
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
+    ATTR_EFFECT,
     ColorMode,
     LightEntity,
+    LightEntityFeature,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, STATE_ON
@@ -39,6 +41,7 @@ from .const import (
     CONF_DIM_MODE,
     CONF_DOWN_CODE,
     CONF_ICON,
+    CONF_EFFECTS,
     CONF_ID,
     CONF_LEVELS,
     CONF_LIGHTS,
@@ -129,6 +132,19 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
             self._dim_mode == DIM_PRESET and bool(self._levels)
         ) or (self._dim_mode == DIM_RELATIVE and bool(self._steps))
 
+        # Named effects (colors, scenes, ...): {effect name: command}.
+        self._effects: dict[str, str] = {}
+        for effect in light.get(CONF_EFFECTS, []):
+            name = effect.get(CONF_NAME)
+            command = effect.get(CONF_CODE_ID)
+            if name and command:
+                self._effects[name] = command
+        self._attr_effect_list = list(self._effects) or None
+        self._attr_effect: str | None = None
+        self._attr_supported_features = (
+            LightEntityFeature.EFFECT if self._effects else LightEntityFeature(0)
+        )
+
         self._attr_name = light[CONF_NAME]
         self._attr_icon = light.get(CONF_ICON)
         self._attr_unique_id = f"{entry.entry_id}_light_{light[CONF_ID]}"
@@ -154,6 +170,9 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
             brightness = last_state.attributes.get(ATTR_BRIGHTNESS)
             if brightness is not None:
                 self._attr_brightness = int(brightness)
+            effect = last_state.attributes.get(ATTR_EFFECT)
+            if effect in self._effects:
+                self._attr_effect = effect
 
     def _nearest_level(self, brightness: int) -> tuple[int, str]:
         """Return the preset (percent, command) level closest to a brightness."""
@@ -188,6 +207,16 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
                     self.hass, self._remote_entity_id, command, self._device
                 )
             self._attr_brightness = _pct_to_brightness(new_value)
+
+    async def _async_apply_effect(self, effect: str) -> None:
+        """Send the command for a named effect and record it."""
+        command = self._effects.get(effect)
+        if command is None:
+            return
+        await async_send_code(
+            self.hass, self._remote_entity_id, command, self._device
+        )
+        self._attr_effect = effect
 
     async def _async_apply_full(self) -> None:
         """Drive the light to full brightness on power-on."""
@@ -243,6 +272,9 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
                         else self._steps[-1]
                     )
                     self._attr_brightness = _pct_to_brightness(default_pct)
+
+            if (effect := kwargs.get(ATTR_EFFECT)) is not None:
+                await self._async_apply_effect(effect)
 
             self.async_write_ha_state()
 

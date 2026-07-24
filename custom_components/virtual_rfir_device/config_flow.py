@@ -30,6 +30,7 @@ from .const import (
     CONF_DEVICE,
     CONF_DIM_MODE,
     CONF_DOWN_CODE,
+    CONF_EFFECTS,
     CONF_HEAT,
     CONF_HEAT_CODE,
     CONF_ICON,
@@ -748,6 +749,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             menu_options.append("set_levels")
         elif mode == DIM_RELATIVE:
             menu_options.append("set_relative")
+        menu_options.append("set_effects")
         menu_options.append("done_edit")
         return self.async_show_menu(step_id="manage_light", menu_options=menu_options)
 
@@ -842,6 +844,50 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                 schema, user_input if user_input is not None else suggested
             ),
             errors=errors,
+        )
+
+    @staticmethod
+    def _tidy(command: str) -> str:
+        """Turn a command name into a friendly default effect label."""
+        return command.replace("_", " ").title()
+
+    async def async_step_set_effects(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Name commands to expose as the light's effects (colors, scenes, ...).
+
+        One screen lists every command in the group with a name box; the ones
+        you name become effects. First-time setup pre-fills tidy names from the
+        command names — clear any you don't want.
+        """
+        self._load()
+        await self._async_refresh_learned()
+        light = self._current_light()
+        if light is None:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            light[CONF_EFFECTS] = [
+                {CONF_NAME: name.strip(), CONF_CODE_ID: command}
+                for command, name in user_input.items()
+                if name and name.strip()
+            ]
+            return await self.async_step_manage_light()
+
+        name_box = selector.TextSelector()
+        schema = vol.Schema(
+            {vol.Optional(command): name_box for command in self._learned}
+        )
+        existing = {
+            effect[CONF_CODE_ID]: effect[CONF_NAME]
+            for effect in light.get(CONF_EFFECTS, [])
+        }
+        suggested = existing or {
+            command: self._tidy(command) for command in self._learned
+        }
+        return self.async_show_form(
+            step_id="set_effects",
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
         )
 
     async def async_step_edit_light(

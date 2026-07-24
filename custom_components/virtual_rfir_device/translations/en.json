@@ -208,8 +208,13 @@
           "edit_light_details": "Edit power commands and dimming mode",
           "set_levels": "Set brightness levels",
           "set_relative": "Set up/down brightness",
+          "set_effects": "Set effects",
           "done_edit": "Done"
         }
+      },
+      "set_effects": {
+        "title": "Set effects",
+        "description": "Name the commands you want as effects (e.g. Blue next to the blue command); they appear in the light's effect list. Selecting an effect turns the light on and sends that command. Leave a command blank to exclude it; first-time setup pre-fills tidy names, so clear the ones you don't want."
       },
       "set_levels": {
         "title": "Set brightness levels",

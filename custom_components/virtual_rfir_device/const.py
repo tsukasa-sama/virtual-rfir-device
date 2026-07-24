@@ -57,6 +57,9 @@ CONF_LEVELS = "levels"
 CONF_PERCENT = "percent"
 # Relative-mode selectable brightness percentages (need not be evenly spaced).
 CONF_STEPS = "steps"
+# Light effects: named commands (colors, scenes, ...) exposed as the light's
+# effect list. Each entry is {CONF_NAME, CONF_CODE_ID}.
+CONF_EFFECTS = "effects"
 
 # Climate keys. off_code (above) turns the unit off / is the mode-off toggle.
 CONF_HEAT = "heat"
