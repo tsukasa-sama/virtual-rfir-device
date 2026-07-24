@@ -19,6 +19,7 @@ from .const import (
     CONF_CLIMATES,
     CONF_ID,
     CONF_LIGHTS,
+    CONF_MEDIA_PLAYERS,
     CONF_REMOTE,
     CONF_SWITCHES,
     DOMAIN,
@@ -31,6 +32,7 @@ _ENTITY_LISTS: tuple[tuple[str, str], ...] = (
     (CONF_SWITCHES, "switch"),
     (CONF_LIGHTS, "light"),
     (CONF_CLIMATES, "climate"),
+    (CONF_MEDIA_PLAYERS, "media_player"),
 )
 
 PLATFORMS: list[Platform] = [
@@ -38,6 +40,7 @@ PLATFORMS: list[Platform] = [
     Platform.SWITCH,
     Platform.LIGHT,
     Platform.CLIMATE,
+    Platform.MEDIA_PLAYER,
 ]
 
 

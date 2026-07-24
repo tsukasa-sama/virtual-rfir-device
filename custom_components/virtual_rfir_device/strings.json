@@ -49,6 +49,9 @@
           "add_climate": "Add climate",
           "edit_climate": "Edit climate",
           "remove_climate": "Remove climate",
+          "add_media": "Add media player",
+          "edit_media": "Edit media player",
+          "remove_media": "Remove media player",
           "settings": "Device settings",
           "finish": "Done"
         }
@@ -327,6 +330,99 @@
         "title": "Remove climates",
         "data": {
           "climates": "Climates to remove"
+        }
+      },
+      "add_media": {
+        "title": "Add media player",
+        "description": "Set the power, volume, and mute commands for a TV or receiver. For a toggle-only power button, pick the same command for on and off. Sources, sound modes, and transport are set next from the media player's menu.",
+        "data": {
+          "name": "Name",
+          "icon": "Icon",
+          "on_code": "Power on command",
+          "off_code": "Power off command",
+          "volume_up_code": "Volume up command",
+          "volume_down_code": "Volume down command",
+          "mute_code": "Mute command"
+        },
+        "data_description": {
+          "name": "Media player name (e.g. Living Room TV).",
+          "icon": "Optional icon for the media player.",
+          "on_code": "Command sent to power on.",
+          "off_code": "Command sent to power off.",
+          "volume_up_code": "Optional. Command to raise the volume one step.",
+          "volume_down_code": "Optional. Command to lower the volume one step.",
+          "mute_code": "Optional. Mute toggle command."
+        }
+      },
+      "edit_media_details": {
+        "title": "Edit media player",
+        "description": "Update the power, volume, and mute commands. Sources, sound modes, and transport are set from the media player's menu.",
+        "data": {
+          "name": "Name",
+          "icon": "Icon",
+          "on_code": "Power on command",
+          "off_code": "Power off command",
+          "volume_up_code": "Volume up command",
+          "volume_down_code": "Volume down command",
+          "mute_code": "Mute command"
+        },
+        "data_description": {
+          "name": "Media player name (e.g. Living Room TV).",
+          "icon": "Optional icon for the media player.",
+          "on_code": "Command sent to power on.",
+          "off_code": "Command sent to power off.",
+          "volume_up_code": "Optional. Command to raise the volume one step.",
+          "volume_down_code": "Optional. Command to lower the volume one step.",
+          "mute_code": "Optional. Mute toggle command."
+        }
+      },
+      "manage_media": {
+        "title": "Edit media player",
+        "description": "Edit the power/volume commands, or set the input sources, sound modes, and transport buttons. Choose Done when finished.",
+        "menu_options": {
+          "edit_media_details": "Edit power, volume, and mute",
+          "set_sources": "Set input sources",
+          "set_sound_modes": "Set sound modes",
+          "set_transport": "Set transport (play/pause/…)",
+          "done_edit": "Done"
+        }
+      },
+      "set_sources": {
+        "title": "Set input sources",
+        "description": "Name the commands you want as input sources (e.g. HDMI 1 next to the hdmi1 command); they appear in the source dropdown. Leave a command blank to exclude it; first-time setup pre-fills tidy names, so clear the ones you don't want."
+      },
+      "set_sound_modes": {
+        "title": "Set sound modes",
+        "description": "Name the commands you want as sound modes (e.g. Surround next to the surround command); they appear in the sound-mode dropdown. Leave a command blank to exclude it; first-time setup pre-fills tidy names, so clear the ones you don't want."
+      },
+      "set_transport": {
+        "title": "Set transport commands",
+        "description": "Optional playback controls. Each button appears only if you assign a command.",
+        "data": {
+          "play_code": "Play",
+          "pause_code": "Pause",
+          "stop_code": "Stop",
+          "next_code": "Next",
+          "previous_code": "Previous"
+        },
+        "data_description": {
+          "play_code": "Command sent for play.",
+          "pause_code": "Command sent for pause.",
+          "stop_code": "Command sent for stop.",
+          "next_code": "Command sent for next track/chapter.",
+          "previous_code": "Command sent for previous track/chapter."
+        }
+      },
+      "edit_media": {
+        "title": "Edit media player",
+        "data": {
+          "id": "Media player to edit"
+        }
+      },
+      "remove_media": {
+        "title": "Remove media players",
+        "data": {
+          "media_players": "Media players to remove"
         }
       }
     },

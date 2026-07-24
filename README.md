@@ -43,6 +43,11 @@ Early development. Current capability:
     (heat and/or cool) plus relative temperature up/down commands; the
     target-temp dial steps by firing up/down. Optionally link a sensor for the
     real current temperature.
+  - **Media player** — optimistic TVs / AV receivers. Power, volume up/down,
+    mute, an input **source** list and a **sound mode** list (each a bulk
+    name→command mapping), and optional transport (play/pause/stop/next/
+    previous). Volume is step-only; channel numbers and now-playing metadata
+    aren't supported (no IR feedback).
 
 A single device can mix any of these — e.g. a fireplace with a climate for
 heat, a switch for the flame, and buttons for effects.

@@ -17,6 +17,7 @@ CONF_BUTTONS = "buttons"
 CONF_SWITCHES = "switches"
 CONF_LIGHTS = "lights"
 CONF_CLIMATES = "climates"
+CONF_MEDIA_PLAYERS = "media_players"
 
 # Device-wide setting: milliseconds to wait between consecutive relative ticks
 # (climate temperature up/down, relative light dimming) so the appliance
@@ -72,6 +73,20 @@ CONF_DOWN_CODE = "down_code"
 CONF_TEMPERATURES = "temperatures"
 CONF_TARGET_TEMP = "target_temp"
 CONF_TEMP_SENSOR = "temp_sensor"
+
+# Media-player keys. on_code/off_code (above) are power. Each *_code holds a
+# single command name; a feature is offered only when its command is set.
+CONF_VOLUME_UP_CODE = "volume_up_code"
+CONF_VOLUME_DOWN_CODE = "volume_down_code"
+CONF_MUTE_CODE = "mute_code"
+CONF_PLAY_CODE = "play_code"
+CONF_PAUSE_CODE = "pause_code"
+CONF_STOP_CODE = "stop_code"
+CONF_NEXT_CODE = "next_code"
+CONF_PREVIOUS_CODE = "previous_code"
+# Inputs and sound modes: lists of {CONF_NAME, CONF_CODE_ID} (like light effects).
+CONF_SOURCES = "sources"
+CONF_SOUND_MODES = "sound_modes"
 
 # Device metadata
 MANUFACTURER = "Virtual RF/IR"

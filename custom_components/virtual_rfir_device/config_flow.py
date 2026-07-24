@@ -37,18 +37,29 @@ from .const import (
     CONF_ID,
     CONF_LEVELS,
     CONF_LIGHTS,
+    CONF_MEDIA_PLAYERS,
+    CONF_MUTE_CODE,
+    CONF_NEXT_CODE,
     CONF_OFF_CODE,
     CONF_ON_CODE,
+    CONF_PAUSE_CODE,
     CONF_PERCENT,
+    CONF_PLAY_CODE,
+    CONF_PREVIOUS_CODE,
     CONF_REMOTE,
+    CONF_SOUND_MODES,
+    CONF_SOURCES,
     CONF_STEP_DELAY,
     CONF_STEPS,
+    CONF_STOP_CODE,
     CONF_SWITCHES,
     CONF_TARGET_TEMP,
     CONF_TEMP_SENSOR,
     CONF_TEMPERATURES,
     CONF_ON_BEHAVIOR,
     CONF_UP_CODE,
+    CONF_VOLUME_DOWN_CODE,
+    CONF_VOLUME_UP_CODE,
     DEFAULT_STEP_DELAY_MS,
     DIM_NONE,
     DIM_PRESET,
@@ -217,6 +228,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         self._switches: list[dict[str, Any]] | None = None
         self._lights: list[dict[str, Any]] | None = None
         self._climates: list[dict[str, Any]] | None = None
+        self._media_players: list[dict[str, Any]] | None = None
         # Device-wide inter-tick delay (ms) for relative stepping; loaded once.
         self._step_delay: int | None = None
         # Learned commands in the entry's device group, as {command: code}.
@@ -242,6 +254,15 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             ]
         if self._climates is None:
             self._climates = [dict(item) for item in options.get(CONF_CLIMATES, [])]
+        if self._media_players is None:
+            self._media_players = [
+                {
+                    **item,
+                    CONF_SOURCES: [dict(s) for s in item.get(CONF_SOURCES, [])],
+                    CONF_SOUND_MODES: [dict(m) for m in item.get(CONF_SOUND_MODES, [])],
+                }
+                for item in options.get(CONF_MEDIA_PLAYERS, [])
+            ]
         if self._step_delay is None:
             self._step_delay = options.get(CONF_STEP_DELAY, DEFAULT_STEP_DELAY_MS)
 
@@ -275,6 +296,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         assert self._switches is not None
         assert self._lights is not None
         assert self._climates is not None
+        assert self._media_players is not None
 
         await self._async_refresh_learned()
 
@@ -296,6 +318,10 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             menu_options.append("add_climate")
         if self._climates:
             menu_options += ["edit_climate", "remove_climate"]
+        if self._learned:
+            menu_options.append("add_media")
+        if self._media_players:
+            menu_options += ["edit_media", "remove_media"]
         menu_options.append("settings")
         menu_options.append("finish")
         return self.async_show_menu(step_id="init", menu_options=menu_options)
@@ -1192,6 +1218,260 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         )
         return self.async_show_form(step_id="remove_climate", data_schema=schema)
 
+    # --- Media players -----------------------------------------------------
+
+    def _current_media(self) -> dict[str, Any] | None:
+        """Return the media player currently being built or edited."""
+        assert self._media_players is not None
+        return _find_by_id(self._media_players, self._edit_id)
+
+    def _media_power_schema(self) -> vol.Schema:
+        """Return the schema for a media player's power/volume/mute commands."""
+        command_select = self._command_select()
+        return vol.Schema(
+            {
+                vol.Required(CONF_NAME): selector.TextSelector(),
+                vol.Optional(CONF_ICON): selector.IconSelector(),
+                vol.Required(CONF_ON_CODE): command_select,
+                vol.Required(CONF_OFF_CODE): command_select,
+                vol.Optional(CONF_VOLUME_UP_CODE): command_select,
+                vol.Optional(CONF_VOLUME_DOWN_CODE): command_select,
+                vol.Optional(CONF_MUTE_CODE): command_select,
+            }
+        )
+
+    def _media_transport_schema(self) -> vol.Schema:
+        """Return the schema for a media player's transport commands."""
+        command_select = self._command_select()
+        return vol.Schema(
+            {
+                vol.Optional(CONF_PLAY_CODE): command_select,
+                vol.Optional(CONF_PAUSE_CODE): command_select,
+                vol.Optional(CONF_STOP_CODE): command_select,
+                vol.Optional(CONF_NEXT_CODE): command_select,
+                vol.Optional(CONF_PREVIOUS_CODE): command_select,
+            }
+        )
+
+    def _apply_media_power(
+        self, user_input: dict[str, Any], player: dict[str, Any]
+    ) -> None:
+        """Write a media player's power/volume/mute fields from user input."""
+        player[CONF_NAME] = user_input[CONF_NAME].strip()
+        player[CONF_ON_CODE] = user_input[CONF_ON_CODE]
+        player[CONF_OFF_CODE] = user_input[CONF_OFF_CODE]
+        _set_optional(player, CONF_ICON, user_input.get(CONF_ICON))
+        _set_optional(
+            player, CONF_VOLUME_UP_CODE, user_input.get(CONF_VOLUME_UP_CODE)
+        )
+        _set_optional(
+            player, CONF_VOLUME_DOWN_CODE, user_input.get(CONF_VOLUME_DOWN_CODE)
+        )
+        _set_optional(player, CONF_MUTE_CODE, user_input.get(CONF_MUTE_CODE))
+
+    async def async_step_add_media(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add a media player: set power/volume/mute, then open its hub."""
+        self._load()
+        assert self._media_players is not None
+        await self._async_refresh_learned()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            if not user_input[CONF_NAME].strip():
+                errors[CONF_NAME] = "name_required"
+            else:
+                player: dict[str, Any] = {
+                    CONF_ID: uuid.uuid4().hex,
+                    CONF_SOURCES: [],
+                    CONF_SOUND_MODES: [],
+                }
+                self._apply_media_power(user_input, player)
+                self._media_players.append(player)
+                self._edit_id = player[CONF_ID]
+                return await self.async_step_manage_media()
+
+        return self.async_show_form(
+            step_id="add_media",
+            data_schema=self.add_suggested_values_to_schema(
+                self._media_power_schema(), user_input
+            ),
+            errors=errors,
+        )
+
+    async def async_step_manage_media(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Hub for the selected media player."""
+        if self._current_media() is None:
+            return await self.async_step_init()
+        return self.async_show_menu(
+            step_id="manage_media",
+            menu_options=[
+                "edit_media_details",
+                "set_sources",
+                "set_sound_modes",
+                "set_transport",
+                "done_edit",
+            ],
+        )
+
+    async def async_step_edit_media_details(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit the media player's power/volume/mute commands."""
+        self._load()
+        await self._async_refresh_learned()
+        player = self._current_media()
+        if player is None:
+            return await self.async_step_init()
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if not user_input[CONF_NAME].strip():
+                errors[CONF_NAME] = "name_required"
+            else:
+                self._apply_media_power(user_input, player)
+                return await self.async_step_manage_media()
+
+        return self.async_show_form(
+            step_id="edit_media_details",
+            data_schema=self.add_suggested_values_to_schema(
+                self._media_power_schema(),
+                user_input if user_input is not None else player,
+            ),
+            errors=errors,
+        )
+
+    async def _async_media_named_bulk(
+        self, step_id: str, storage_key: str, user_input: dict[str, Any] | None
+    ) -> ConfigFlowResult:
+        """Bulk name→command editor for a media player's sources / sound modes."""
+        self._load()
+        await self._async_refresh_learned()
+        player = self._current_media()
+        if player is None:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            player[storage_key] = [
+                {CONF_NAME: name.strip(), CONF_CODE_ID: command}
+                for command, name in user_input.items()
+                if name and name.strip()
+            ]
+            return await self.async_step_manage_media()
+
+        name_box = selector.TextSelector()
+        schema = vol.Schema(
+            {vol.Optional(command): name_box for command in self._learned}
+        )
+        existing = {
+            item[CONF_CODE_ID]: item[CONF_NAME] for item in player.get(storage_key, [])
+        }
+        suggested = existing or {
+            command: self._tidy(command) for command in self._learned
+        }
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+        )
+
+    async def async_step_set_sources(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Name commands to expose as input sources."""
+        return await self._async_media_named_bulk(
+            "set_sources", CONF_SOURCES, user_input
+        )
+
+    async def async_step_set_sound_modes(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Name commands to expose as sound modes."""
+        return await self._async_media_named_bulk(
+            "set_sound_modes", CONF_SOUND_MODES, user_input
+        )
+
+    async def async_step_set_transport(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Set the optional transport commands (play/pause/stop/next/previous)."""
+        self._load()
+        await self._async_refresh_learned()
+        player = self._current_media()
+        if player is None:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            for key in (
+                CONF_PLAY_CODE,
+                CONF_PAUSE_CODE,
+                CONF_STOP_CODE,
+                CONF_NEXT_CODE,
+                CONF_PREVIOUS_CODE,
+            ):
+                _set_optional(player, key, user_input.get(key))
+            return await self.async_step_manage_media()
+
+        return self.async_show_form(
+            step_id="set_transport",
+            data_schema=self.add_suggested_values_to_schema(
+                self._media_transport_schema(), player
+            ),
+        )
+
+    async def async_step_edit_media(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose a media player to edit, then open its hub."""
+        self._load()
+        assert self._media_players is not None
+
+        if user_input is not None:
+            self._edit_id = user_input[CONF_ID]
+            return await self.async_step_manage_media()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_ID): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=_as_options(self._media_players)
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="edit_media", data_schema=schema)
+
+    async def async_step_remove_media(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Remove one or more media-player entities."""
+        self._load()
+        assert self._media_players is not None
+
+        if user_input is not None:
+            to_remove = set(user_input.get(CONF_MEDIA_PLAYERS, []))
+            self._media_players = [
+                player
+                for player in self._media_players
+                if player[CONF_ID] not in to_remove
+            ]
+            return await self.async_step_init()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_MEDIA_PLAYERS): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=_as_options(self._media_players),
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="remove_media", data_schema=schema)
+
     # --- Shared navigation -------------------------------------------------
 
     async def async_step_done_edit(
@@ -1214,6 +1494,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                 CONF_SWITCHES: self._switches,
                 CONF_LIGHTS: self._lights,
                 CONF_CLIMATES: self._climates,
+                CONF_MEDIA_PLAYERS: self._media_players,
                 CONF_STEP_DELAY: self._step_delay,
             }
         )
