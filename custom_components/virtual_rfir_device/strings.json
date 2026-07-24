@@ -152,77 +152,66 @@
       },
       "add_light": {
         "title": "Add light",
-        "description": "Set the power commands and choose how the light dims. For a toggle-only appliance, pick the same command for on and off. Preset lights add their brightness levels next.",
+        "description": "Set the power commands and choose how the light dims. For a toggle-only appliance, pick the same command for on and off. You'll set up the dimming next, from the light's menu.",
         "data": {
           "name": "Name",
           "icon": "Icon",
           "on_code": "On command",
           "off_code": "Off command",
-          "dim_mode": "Dimming",
-          "up_code": "Brightness up command",
-          "down_code": "Brightness down command",
-          "steps": "Brightness steps (%)"
+          "dim_mode": "Dimming"
         },
         "data_description": {
           "name": "Light name (e.g. Counter Lights).",
           "icon": "Optional icon for the light.",
           "on_code": "Command sent to turn the light on.",
           "off_code": "Command sent to turn the light off.",
-          "dim_mode": "On/off only; Preset levels (a code per level); or Up/down (relative brightness_up/down over a list of steps).",
-          "up_code": "Relative only: command that steps brightness up one level.",
-          "down_code": "Relative only: command that steps brightness down one level.",
-          "steps": "Relative only: selectable brightness percentages, one per line or comma-separated (e.g. 10, 30, 60, 100). Need not be evenly spaced."
+          "dim_mode": "On/off only; Preset levels (a code per absolute level); or Up/down (relative brightness_up/down over a list of steps). You configure the details on the next screen."
         }
       },
       "edit_light_details": {
         "title": "Edit light",
-        "description": "Update the power commands and dimming. Preset lights manage their brightness levels from the light's menu.",
+        "description": "Update the power commands and dimming mode. The levels or up/down codes are set from the light's menu.",
         "data": {
           "name": "Name",
           "icon": "Icon",
           "on_code": "On command",
           "off_code": "Off command",
-          "dim_mode": "Dimming",
-          "up_code": "Brightness up command",
-          "down_code": "Brightness down command",
-          "steps": "Brightness steps (%)"
+          "dim_mode": "Dimming"
         },
         "data_description": {
           "name": "Light name (e.g. Counter Lights).",
           "icon": "Optional icon for the light.",
           "on_code": "Command sent to turn the light on.",
           "off_code": "Command sent to turn the light off.",
-          "dim_mode": "On/off only; Preset levels (a code per level); or Up/down (relative brightness_up/down over a list of steps).",
-          "up_code": "Relative only: command that steps brightness up one level.",
-          "down_code": "Relative only: command that steps brightness down one level.",
-          "steps": "Relative only: selectable brightness percentages, one per line or comma-separated (e.g. 10, 30, 60, 100). Need not be evenly spaced."
+          "dim_mode": "On/off only; Preset levels (a code per absolute level); or Up/down (relative brightness_up/down over a list of steps)."
         }
       },
       "manage_light": {
         "title": "Edit light",
-        "description": "Edit the power commands and dimming. Preset lights can also add or remove brightness levels (the slider snaps to the nearest). Choose Done when finished.",
+        "description": "Edit the power commands and dimming mode. Preset lights map brightness levels; relative lights set their up/down codes. Choose Done when finished.",
         "menu_options": {
-          "edit_light_details": "Edit power commands and dimming",
-          "add_level": "Add brightness level",
-          "remove_level": "Remove brightness level",
+          "edit_light_details": "Edit power commands and dimming mode",
+          "set_levels": "Set brightness levels",
+          "set_relative": "Set up/down brightness",
           "done_edit": "Done"
         }
       },
-      "add_level": {
-        "title": "Add brightness level",
+      "set_levels": {
+        "title": "Set brightness levels",
+        "description": "Enter a percentage next to each command that sets an absolute brightness level (e.g. 100 next to 100_percent). Leave power, effects, and other commands blank. The slider snaps to the nearest level. Re-open this to change them."
+      },
+      "set_relative": {
+        "title": "Set up/down brightness",
+        "description": "Pick the relative brightness commands and the levels the slider steps through.",
         "data": {
-          "code_id": "Command",
-          "percent": "Brightness %"
+          "up_code": "Brightness up command",
+          "down_code": "Brightness down command",
+          "steps": "Brightness steps (%)"
         },
         "data_description": {
-          "code_id": "The learned command that sets this brightness level.",
-          "percent": "The brightness this command represents (1-100)."
-        }
-      },
-      "remove_level": {
-        "title": "Remove brightness levels",
-        "data": {
-          "levels": "Levels to remove"
+          "up_code": "Command that steps brightness up one level.",
+          "down_code": "Command that steps brightness down one level.",
+          "steps": "Selectable brightness percentages, one per line or comma-separated (e.g. 10, 30, 60, 100). Need not be evenly spaced."
         }
       },
       "edit_light": {

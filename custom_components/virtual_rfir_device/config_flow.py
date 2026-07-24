@@ -580,7 +580,12 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         return DIM_PRESET if light.get(CONF_LEVELS) else DIM_NONE
 
     def _light_schema(self) -> vol.Schema:
-        """Return the schema for a light's power codes and dimming setup."""
+        """Return the power schema for a light (name, icon, on/off, dim mode).
+
+        Mode-specific setup (preset levels or relative up/down) is a separate
+        step in the light's hub, because a form can't reveal fields based on the
+        mode chosen in that same form.
+        """
         command_select = self._command_select()
         return vol.Schema(
             {
@@ -603,22 +608,8 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                         ]
                     )
                 ),
-                vol.Optional(CONF_UP_CODE): command_select,
-                vol.Optional(CONF_DOWN_CODE): command_select,
-                vol.Optional(CONF_STEPS): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
             }
         )
-
-    @classmethod
-    def _light_suggested(cls, light: dict[str, Any]) -> dict[str, Any]:
-        """Return light values shaped for the form (steps as text, mode filled)."""
-        suggested = dict(light)
-        suggested[CONF_DIM_MODE] = cls._light_dim_mode(light)
-        steps = light.get(CONF_STEPS) or []
-        suggested[CONF_STEPS] = "\n".join(str(int(s)) for s in steps)
-        return suggested
 
     @staticmethod
     def _parse_steps(text: str) -> list[int] | None:
@@ -641,51 +632,29 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             values.add(value)
         return sorted(values)
 
-    @classmethod
-    def _validate_light(cls, user_input: dict[str, Any]) -> dict[str, str]:
-        """Return field errors for a light submission."""
-        errors: dict[str, str] = {}
-        if not user_input[CONF_NAME].strip():
-            errors[CONF_NAME] = "name_required"
-        if user_input.get(CONF_DIM_MODE) == DIM_RELATIVE:
-            if not user_input.get(CONF_UP_CODE):
-                errors[CONF_UP_CODE] = "code_required"
-            if not user_input.get(CONF_DOWN_CODE):
-                errors[CONF_DOWN_CODE] = "code_required"
-            steps = cls._parse_steps(user_input.get(CONF_STEPS) or "")
-            if steps is None:
-                errors[CONF_STEPS] = "invalid_steps"
-            elif not steps:
-                errors[CONF_STEPS] = "steps_required"
-        return errors
+    def _apply_light_power(
+        self, user_input: dict[str, Any], light: dict[str, Any]
+    ) -> None:
+        """Write the light's power fields and dim mode from the power form.
 
-    def _build_light(self, user_input: dict[str, Any], light: dict[str, Any]) -> None:
-        """Write validated light fields from user input into a light dict."""
-        mode = user_input.get(CONF_DIM_MODE, DIM_NONE)
+        Mode-specific data (levels / up-down / steps) is left untouched so it
+        stays dormant when switching modes back and forth.
+        """
         light[CONF_NAME] = user_input[CONF_NAME].strip()
         light[CONF_ON_CODE] = user_input[CONF_ON_CODE]
         light[CONF_OFF_CODE] = user_input[CONF_OFF_CODE]
-        light[CONF_DIM_MODE] = mode
+        light[CONF_DIM_MODE] = user_input.get(CONF_DIM_MODE, DIM_NONE)
         light.setdefault(CONF_LEVELS, [])
         _set_optional(light, CONF_ICON, user_input.get(CONF_ICON))
-        if mode == DIM_RELATIVE:
-            light[CONF_UP_CODE] = user_input[CONF_UP_CODE]
-            light[CONF_DOWN_CODE] = user_input[CONF_DOWN_CODE]
-            light[CONF_STEPS] = self._parse_steps(user_input.get(CONF_STEPS) or "")
-        else:
-            # Relative fields are irrelevant in other modes; preset levels are
-            # kept dormant so switching modes back and forth is non-destructive.
-            light.pop(CONF_UP_CODE, None)
-            light.pop(CONF_DOWN_CODE, None)
-            light.pop(CONF_STEPS, None)
 
     async def async_step_add_light(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Add a light: set power codes and choose a dimming mode.
 
-        For a toggle-only appliance, pick the same command for on and off.
-        Preset lights then add brightness levels in the light's hub.
+        For a toggle-only appliance, pick the same command for on and off. The
+        light's hub then opens, where preset lights map brightness levels and
+        relative lights set their up/down codes.
         """
         self._load()
         assert self._lights is not None
@@ -693,10 +662,11 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            errors = self._validate_light(user_input)
-            if not errors:
+            if not user_input[CONF_NAME].strip():
+                errors[CONF_NAME] = "name_required"
+            else:
                 light: dict[str, Any] = {CONF_ID: uuid.uuid4().hex, CONF_LEVELS: []}
-                self._build_light(user_input, light)
+                self._apply_light_power(user_input, light)
                 self._lights.append(light)
                 self._edit_id = light[CONF_ID]
                 return await self.async_step_manage_light()
@@ -712,23 +682,28 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
     async def async_step_manage_light(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Hub for the selected light: power codes and (preset) brightness levels."""
+        """Hub for the selected light: power codes plus mode-specific dimming."""
         light = self._current_light()
         if light is None:
             return await self.async_step_init()
 
         menu_options = ["edit_light_details"]
-        if self._light_dim_mode(light) == DIM_PRESET:
-            menu_options.append("add_level")
-            if light.get(CONF_LEVELS):
-                menu_options.append("remove_level")
+        mode = self._light_dim_mode(light)
+        if mode == DIM_PRESET:
+            menu_options.append("set_levels")
+        elif mode == DIM_RELATIVE:
+            menu_options.append("set_relative")
         menu_options.append("done_edit")
         return self.async_show_menu(step_id="manage_light", menu_options=menu_options)
 
-    async def async_step_add_level(
+    async def async_step_set_levels(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Add a brightness level (a command mapped to a percentage)."""
+        """Map brightness levels: a percentage next to each learned command.
+
+        One screen lists every command in the group; fill a % only for the ones
+        that are absolute brightness levels (leave power/effects blank).
+        """
         self._load()
         await self._async_refresh_learned()
         light = self._current_light()
@@ -736,64 +711,83 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             return await self.async_step_init()
 
         if user_input is not None:
-            light[CONF_LEVELS].append(
+            light[CONF_LEVELS] = [
                 {
                     CONF_ID: uuid.uuid4().hex,
-                    CONF_CODE_ID: user_input[CONF_CODE_ID],
-                    CONF_PERCENT: int(user_input[CONF_PERCENT]),
+                    CONF_CODE_ID: command,
+                    CONF_PERCENT: int(percent),
                 }
-            )
+                for command, percent in user_input.items()
+                if percent is not None
+            ]
             return await self.async_step_manage_light()
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_CODE_ID): self._command_select(),
-                vol.Required(CONF_PERCENT): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=1, max=100, step=1, mode=selector.NumberSelectorMode.BOX
-                    )
-                ),
-            }
+        percent_box = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=1, max=100, step=1, mode=selector.NumberSelectorMode.BOX
+            )
         )
-        return self.async_show_form(step_id="add_level", data_schema=schema)
+        schema = vol.Schema(
+            {vol.Optional(command): percent_box for command in self._learned}
+        )
+        suggested = {
+            level[CONF_CODE_ID]: level[CONF_PERCENT]
+            for level in light.get(CONF_LEVELS, [])
+        }
+        return self.async_show_form(
+            step_id="set_levels",
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+        )
 
-    async def async_step_remove_level(
+    async def async_step_set_relative(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Remove one or more brightness levels from the current light."""
+        """Set the relative up/down codes and the brightness step percentages."""
         self._load()
+        await self._async_refresh_learned()
         light = self._current_light()
         if light is None:
             return await self.async_step_init()
 
+        errors: dict[str, str] = {}
         if user_input is not None:
-            to_remove = set(user_input.get(CONF_LEVELS, []))
-            light[CONF_LEVELS] = [
-                level
-                for level in light[CONF_LEVELS]
-                if level[CONF_ID] not in to_remove
-            ]
-            return await self.async_step_manage_light()
+            steps = self._parse_steps(user_input.get(CONF_STEPS) or "")
+            if not user_input.get(CONF_UP_CODE):
+                errors[CONF_UP_CODE] = "code_required"
+            if not user_input.get(CONF_DOWN_CODE):
+                errors[CONF_DOWN_CODE] = "code_required"
+            if steps is None:
+                errors[CONF_STEPS] = "invalid_steps"
+            elif not steps:
+                errors[CONF_STEPS] = "steps_required"
+            if not errors:
+                light[CONF_UP_CODE] = user_input[CONF_UP_CODE]
+                light[CONF_DOWN_CODE] = user_input[CONF_DOWN_CODE]
+                light[CONF_STEPS] = steps
+                return await self.async_step_manage_light()
 
-        options = [
-            selector.SelectOptionDict(
-                value=level[CONF_ID],
-                label=f"{level[CONF_PERCENT]}% — {level.get(CONF_CODE_ID) or '?'}",
-            )
-            for level in light[CONF_LEVELS]
-        ]
+        command_select = self._command_select()
         schema = vol.Schema(
             {
-                vol.Required(CONF_LEVELS): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=options,
-                        multiple=True,
-                        mode=selector.SelectSelectorMode.LIST,
-                    )
-                )
+                vol.Optional(CONF_UP_CODE): command_select,
+                vol.Optional(CONF_DOWN_CODE): command_select,
+                vol.Optional(CONF_STEPS): selector.TextSelector(
+                    selector.TextSelectorConfig(multiline=True)
+                ),
             }
         )
-        return self.async_show_form(step_id="remove_level", data_schema=schema)
+        suggested = {
+            CONF_UP_CODE: light.get(CONF_UP_CODE),
+            CONF_DOWN_CODE: light.get(CONF_DOWN_CODE),
+            CONF_STEPS: "\n".join(str(int(s)) for s in light.get(CONF_STEPS) or []),
+        }
+        return self.async_show_form(
+            step_id="set_relative",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input if user_input is not None else suggested
+            ),
+            errors=errors,
+        )
 
     async def async_step_edit_light(
         self, user_input: dict[str, Any] | None = None
@@ -827,18 +821,18 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
 
         errors: dict[str, str] = {}
         if user_input is not None:
-            errors = self._validate_light(user_input)
-            if not errors:
-                self._build_light(user_input, light)
+            if not user_input[CONF_NAME].strip():
+                errors[CONF_NAME] = "name_required"
+            else:
+                self._apply_light_power(user_input, light)
                 return await self.async_step_manage_light()
 
+        suggested = {**light, CONF_DIM_MODE: self._light_dim_mode(light)}
         return self.async_show_form(
             step_id="edit_light_details",
             data_schema=self.add_suggested_values_to_schema(
                 self._light_schema(),
-                user_input
-                if user_input is not None
-                else self._light_suggested(light),
+                user_input if user_input is not None else suggested,
             ),
             errors=errors,
         )
