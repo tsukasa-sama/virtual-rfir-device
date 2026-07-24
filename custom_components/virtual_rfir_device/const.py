@@ -18,6 +18,13 @@ CONF_SWITCHES = "switches"
 CONF_LIGHTS = "lights"
 CONF_CLIMATES = "climates"
 
+# Device-wide setting: milliseconds to wait between consecutive relative ticks
+# (climate temperature up/down, relative light dimming) so the appliance
+# registers each press. Sends are already serialized per entity; this adds a
+# gap on top of the transmission time.
+CONF_STEP_DELAY = "step_delay"
+DEFAULT_STEP_DELAY_MS = 100
+
 # Shared item keys
 CONF_ID = "id"
 CONF_ICON = "icon"
@@ -37,6 +44,13 @@ CONF_DIM_MODE = "dim_mode"
 DIM_NONE = "none"
 DIM_PRESET = "preset"
 DIM_RELATIVE = "relative"
+
+# Power-on brightness behavior (dimmable lights only):
+#   ON_RESUME - send only the on code; the device resumes its own last level
+#   ON_FULL   - drive to full brightness on power-on
+CONF_ON_BEHAVIOR = "on_behavior"
+ON_RESUME = "resume"
+ON_FULL = "full"
 
 # Light brightness-level keys (preset mode)
 CONF_LEVELS = "levels"

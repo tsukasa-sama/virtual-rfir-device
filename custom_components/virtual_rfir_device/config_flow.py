@@ -40,16 +40,21 @@ from .const import (
     CONF_ON_CODE,
     CONF_PERCENT,
     CONF_REMOTE,
+    CONF_STEP_DELAY,
     CONF_STEPS,
     CONF_SWITCHES,
     CONF_TARGET_TEMP,
     CONF_TEMP_SENSOR,
     CONF_TEMPERATURES,
+    CONF_ON_BEHAVIOR,
     CONF_UP_CODE,
+    DEFAULT_STEP_DELAY_MS,
     DIM_NONE,
     DIM_PRESET,
     DIM_RELATIVE,
     DOMAIN,
+    ON_FULL,
+    ON_RESUME,
 )
 
 
@@ -211,6 +216,8 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         self._switches: list[dict[str, Any]] | None = None
         self._lights: list[dict[str, Any]] | None = None
         self._climates: list[dict[str, Any]] | None = None
+        # Device-wide inter-tick delay (ms) for relative stepping; loaded once.
+        self._step_delay: int | None = None
         # Learned commands in the entry's device group, as {command: code}.
         # Refreshed from the remote's store whenever a picker is shown; {} if the
         # group is gone / the remote can't be read.
@@ -234,6 +241,8 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             ]
         if self._climates is None:
             self._climates = [dict(item) for item in options.get(CONF_CLIMATES, [])]
+        if self._step_delay is None:
+            self._step_delay = options.get(CONF_STEP_DELAY, DEFAULT_STEP_DELAY_MS)
 
     async def _async_refresh_learned(self) -> None:
         """Re-read the entry's device-group commands so pickers are current."""
@@ -286,8 +295,39 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
             menu_options.append("add_climate")
         if self._climates:
             menu_options += ["edit_climate", "remove_climate"]
+        menu_options.append("settings")
         menu_options.append("finish")
         return self.async_show_menu(step_id="init", menu_options=menu_options)
+
+    async def async_step_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Device-wide settings (currently the relative-stepping tick delay)."""
+        self._load()
+
+        if user_input is not None:
+            self._step_delay = int(user_input[CONF_STEP_DELAY])
+            return await self.async_step_init()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_STEP_DELAY): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        max=2000,
+                        step=10,
+                        unit_of_measurement="ms",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(
+            step_id="settings",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, {CONF_STEP_DELAY: self._step_delay}
+            ),
+        )
 
     # --- Buttons -----------------------------------------------------------
 
@@ -608,6 +648,20 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                         ]
                     )
                 ),
+                vol.Optional(
+                    CONF_ON_BEHAVIOR, default=ON_RESUME
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(
+                                value=ON_RESUME, label="Resume last brightness"
+                            ),
+                            selector.SelectOptionDict(
+                                value=ON_FULL, label="Full brightness"
+                            ),
+                        ]
+                    )
+                ),
             }
         )
 
@@ -644,6 +698,7 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
         light[CONF_ON_CODE] = user_input[CONF_ON_CODE]
         light[CONF_OFF_CODE] = user_input[CONF_OFF_CODE]
         light[CONF_DIM_MODE] = user_input.get(CONF_DIM_MODE, DIM_NONE)
+        light[CONF_ON_BEHAVIOR] = user_input.get(CONF_ON_BEHAVIOR, ON_RESUME)
         light.setdefault(CONF_LEVELS, [])
         _set_optional(light, CONF_ICON, user_input.get(CONF_ICON))
 
@@ -1113,5 +1168,6 @@ class VirtualRfirDeviceOptionsFlow(OptionsFlow):
                 CONF_SWITCHES: self._switches,
                 CONF_LIGHTS: self._lights,
                 CONF_CLIMATES: self._climates,
+                CONF_STEP_DELAY: self._step_delay,
             }
         )

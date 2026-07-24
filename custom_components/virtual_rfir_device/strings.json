@@ -49,7 +49,18 @@
           "add_climate": "Add climate",
           "edit_climate": "Edit climate",
           "remove_climate": "Remove climate",
+          "settings": "Device settings",
           "finish": "Done"
+        }
+      },
+      "settings": {
+        "title": "Device settings",
+        "description": "Settings that apply to the whole device.",
+        "data": {
+          "step_delay": "Tick delay"
+        },
+        "data_description": {
+          "step_delay": "Milliseconds to wait between each relative up/down press (climate temperature and relative light dimming), so the appliance registers every step. Increase it if fast changes skip steps; 0 sends as fast as the remote allows."
         }
       },
       "add_button": {
@@ -158,14 +169,16 @@
           "icon": "Icon",
           "on_code": "On command",
           "off_code": "Off command",
-          "dim_mode": "Dimming"
+          "dim_mode": "Dimming",
+          "on_behavior": "Power-on brightness"
         },
         "data_description": {
           "name": "Light name (e.g. Counter Lights).",
           "icon": "Optional icon for the light.",
           "on_code": "Command sent to turn the light on.",
           "off_code": "Command sent to turn the light off.",
-          "dim_mode": "On/off only; Preset levels (a code per absolute level); or Up/down (relative brightness_up/down over a list of steps). You configure the details on the next screen."
+          "dim_mode": "On/off only; Preset levels (a code per absolute level); or Up/down (relative brightness_up/down over a list of steps). You configure the details on the next screen.",
+          "on_behavior": "For dimmable lights: on power-on, resume the last brightness (send only the on command) or drive to full brightness."
         }
       },
       "edit_light_details": {
@@ -176,14 +189,16 @@
           "icon": "Icon",
           "on_code": "On command",
           "off_code": "Off command",
-          "dim_mode": "Dimming"
+          "dim_mode": "Dimming",
+          "on_behavior": "Power-on brightness"
         },
         "data_description": {
           "name": "Light name (e.g. Counter Lights).",
           "icon": "Optional icon for the light.",
           "on_code": "Command sent to turn the light on.",
           "off_code": "Command sent to turn the light off.",
-          "dim_mode": "On/off only; Preset levels (a code per absolute level); or Up/down (relative brightness_up/down over a list of steps)."
+          "dim_mode": "On/off only; Preset levels (a code per absolute level); or Up/down (relative brightness_up/down over a list of steps).",
+          "on_behavior": "For dimmable lights: on power-on, resume the last brightness (send only the on command) or drive to full brightness."
         }
       },
       "manage_light": {

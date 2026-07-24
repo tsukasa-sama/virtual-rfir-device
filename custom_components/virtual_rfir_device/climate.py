@@ -14,6 +14,7 @@ one, the current temperature mirrors the target so the dial still reads sensibly
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from homeassistant.components.climate import (
@@ -46,10 +47,12 @@ from .const import (
     CONF_ID,
     CONF_OFF_CODE,
     CONF_REMOTE,
+    CONF_STEP_DELAY,
     CONF_TARGET_TEMP,
     CONF_TEMP_SENSOR,
     CONF_TEMPERATURES,
     CONF_UP_CODE,
+    DEFAULT_STEP_DELAY_MS,
     DOMAIN,
 )
 from .helpers import async_send_code
@@ -77,6 +80,12 @@ class VirtualRfirClimate(ClimateEntity, RestoreEntity):
         """Initialize the climate entity from a stored definition."""
         self._remote_entity_id: str = entry.data[CONF_REMOTE]
         self._device: str | None = entry.data.get(CONF_DEVICE)
+        # Seconds to wait between consecutive up/down ticks.
+        self._step_delay = (
+            entry.options.get(CONF_STEP_DELAY, DEFAULT_STEP_DELAY_MS) / 1000
+        )
+        # Serializes commands so rapid adjustments don't interleave and drift.
+        self._lock = asyncio.Lock()
         # Each mode/step is the name of a command learned in the device group.
         self._off_command: str | None = climate.get(CONF_OFF_CODE)
         self._heat_command: str | None = climate.get(CONF_HEAT_CODE)
@@ -168,9 +177,12 @@ class VirtualRfirClimate(ClimateEntity, RestoreEntity):
             HVACMode.COOL: self._cool_command,
             HVACMode.OFF: self._off_command,
         }.get(hvac_mode)
-        await async_send_code(self.hass, self._remote_entity_id, command, self._device)
-        self._attr_hvac_mode = hvac_mode
-        self.async_write_ha_state()
+        async with self._lock:
+            await async_send_code(
+                self.hass, self._remote_entity_id, command, self._device
+            )
+            self._attr_hvac_mode = hvac_mode
+            self.async_write_ha_state()
 
     async def async_turn_on(self) -> None:
         """Turn on to the first available active mode (heat preferred)."""
@@ -195,25 +207,30 @@ class VirtualRfirClimate(ClimateEntity, RestoreEntity):
         if requested is None or not self._temps:
             return
 
-        if self._attr_hvac_mode == HVACMode.OFF:
-            # Snap the dial back to the unchanged target.
-            self.async_write_ha_state()
-            return
+        # Serialize so a rapid second adjustment computes its delta from the
+        # fully-updated target rather than a stale one.
+        async with self._lock:
+            if self._attr_hvac_mode == HVACMode.OFF:
+                # Snap the dial back to the unchanged target.
+                self.async_write_ha_state()
+                return
 
-        new_value = min(self._temps, key=lambda t: abs(t - float(requested)))
-        current = self._attr_target_temperature
-        current_value = (
-            min(self._temps, key=lambda t: abs(t - current))
-            if current is not None
-            else self._temps[0]
-        )
-        delta = self._temps.index(new_value) - self._temps.index(current_value)
-
-        command = self._up_command if delta > 0 else self._down_command
-        for _ in range(abs(delta)):
-            await async_send_code(
-                self.hass, self._remote_entity_id, command, self._device
+            new_value = min(self._temps, key=lambda t: abs(t - float(requested)))
+            current = self._attr_target_temperature
+            current_value = (
+                min(self._temps, key=lambda t: abs(t - current))
+                if current is not None
+                else self._temps[0]
             )
+            delta = self._temps.index(new_value) - self._temps.index(current_value)
 
-        self._attr_target_temperature = new_value
-        self.async_write_ha_state()
+            command = self._up_command if delta > 0 else self._down_command
+            for tick in range(abs(delta)):
+                if tick and self._step_delay:
+                    await asyncio.sleep(self._step_delay)
+                await async_send_code(
+                    self.hass, self._remote_entity_id, command, self._device
+                )
+
+            self._attr_target_temperature = new_value
+            self.async_write_ha_state()

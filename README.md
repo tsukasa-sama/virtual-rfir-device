@@ -34,7 +34,9 @@ Early development. Current capability:
     10%…100% — the slider snaps to the nearest), **relative** (`brightness_up` /
     `brightness_down` codes stepped across a list of percentages, like the
     climate dial), or **none** (on/off only). Brightness is inert while the
-    light is off — adjusting it snaps back; turn the light on first.
+    light is off — adjusting it snaps back; turn the light on first. A power-on
+    option decides whether the light resumes its last brightness or drives to
+    full when switched on.
   - **Climate** — optimistic heaters/coolers. A mode command per enabled mode
     (heat and/or cool) plus relative temperature up/down commands; the
     target-temp dial steps by firing up/down. Optionally link a sensor for the
@@ -42,6 +44,11 @@ Early development. Current capability:
 
 A single device can mix any of these — e.g. a fireplace with a climate for
 heat, a switch for the flame, and buttons for effects.
+
+**Device settings** (the **Device settings** menu item) include a *tick delay* —
+the pause between consecutive relative presses (climate temperature and relative
+light dimming). Rapid adjustments are serialized so they never interleave; the
+delay adds a gap on top so the appliance reliably registers each step.
 
 > **Reading learned commands is Broadlink-specific for now.** The live picker
 > reads Broadlink's learned-command store (`.storage/broadlink_remote_<mac>_codes`).

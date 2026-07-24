@@ -18,6 +18,7 @@ remote is used.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from homeassistant.components.light import (
@@ -42,15 +43,20 @@ from .const import (
     CONF_LEVELS,
     CONF_LIGHTS,
     CONF_OFF_CODE,
+    CONF_ON_BEHAVIOR,
     CONF_ON_CODE,
     CONF_PERCENT,
     CONF_REMOTE,
+    CONF_STEP_DELAY,
     CONF_STEPS,
     CONF_UP_CODE,
+    DEFAULT_STEP_DELAY_MS,
     DIM_NONE,
     DIM_PRESET,
     DIM_RELATIVE,
     DOMAIN,
+    ON_FULL,
+    ON_RESUME,
 )
 from .helpers import async_send_code
 
@@ -96,6 +102,13 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
         self._on_command: str | None = light.get(CONF_ON_CODE)
         self._off_command: str | None = light.get(CONF_OFF_CODE)
         self._dim_mode = _dim_mode(light)
+        self._on_behavior = light.get(CONF_ON_BEHAVIOR, ON_RESUME)
+        # Seconds between consecutive relative ticks.
+        self._step_delay = (
+            entry.options.get(CONF_STEP_DELAY, DEFAULT_STEP_DELAY_MS) / 1000
+        )
+        # Serializes commands so rapid adjustments don't interleave and drift.
+        self._lock = asyncio.Lock()
 
         # Preset dimming: sorted (percent, command) absolute levels.
         levels: list[tuple[int, str]] = []
@@ -168,49 +181,77 @@ class VirtualRfirLight(LightEntity, RestoreEntity):
             )
             delta = self._steps.index(new_value) - self._steps.index(current_value)
             command = self._up_command if delta > 0 else self._down_command
-            for _ in range(abs(delta)):
+            for tick in range(abs(delta)):
+                if tick and self._step_delay:
+                    await asyncio.sleep(self._step_delay)
                 await async_send_code(
                     self.hass, self._remote_entity_id, command, self._device
                 )
             self._attr_brightness = _pct_to_brightness(new_value)
+
+    async def _async_apply_full(self) -> None:
+        """Drive the light to full brightness on power-on."""
+        if self._dim_mode == DIM_PRESET:
+            percent, command = self._levels[-1]
+            await async_send_code(
+                self.hass, self._remote_entity_id, command, self._device
+            )
+            self._attr_brightness = _pct_to_brightness(percent)
+        elif self._dim_mode == DIM_RELATIVE:
+            # Step up once per level so it saturates at max from any position;
+            # extra presses at the top are clamped by the appliance.
+            for tick in range(len(self._steps)):
+                if tick and self._step_delay:
+                    await asyncio.sleep(self._step_delay)
+                await async_send_code(
+                    self.hass, self._remote_entity_id, self._up_command, self._device
+                )
+            self._attr_brightness = _pct_to_brightness(self._steps[-1])
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Power on (if needed) and optionally set the brightness.
 
         Brightness is inert while off: a brightness request on an off light snaps
         back and the light stays off. A plain turn-on (no brightness) powers it
-        on. Once on, brightness requests take effect.
+        on; then the power-on behavior applies — resume the last level (send
+        nothing more, let the device restore it) or drive to full brightness.
+        Once on, explicit brightness requests take effect.
         """
-        if not self._attr_is_on and ATTR_BRIGHTNESS in kwargs:
-            self.async_write_ha_state()
-            return
+        async with self._lock:
+            if not self._attr_is_on and ATTR_BRIGHTNESS in kwargs:
+                self.async_write_ha_state()
+                return
 
-        if not self._attr_is_on:
-            await async_send_code(
-                self.hass, self._remote_entity_id, self._on_command, self._device
-            )
-        self._attr_is_on = True
-
-        if self._has_brightness:
-            if ATTR_BRIGHTNESS in kwargs:
-                await self._async_apply_brightness(kwargs[ATTR_BRIGHTNESS])
-            elif self._attr_brightness is None:
-                # Just powered on with no known level; show a sensible default:
-                # highest preset level, or the lowest relative step as a baseline.
-                default_pct = (
-                    self._levels[-1][0]
-                    if self._dim_mode == DIM_PRESET
-                    else self._steps[0]
+            was_off = not self._attr_is_on
+            if was_off:
+                await async_send_code(
+                    self.hass, self._remote_entity_id, self._on_command, self._device
                 )
-                self._attr_brightness = _pct_to_brightness(default_pct)
+            self._attr_is_on = True
 
-        self.async_write_ha_state()
+            if self._has_brightness:
+                if ATTR_BRIGHTNESS in kwargs:
+                    await self._async_apply_brightness(kwargs[ATTR_BRIGHTNESS])
+                elif was_off and self._on_behavior == ON_FULL:
+                    await self._async_apply_full()
+                elif self._attr_brightness is None:
+                    # Resume mode, no known level yet: show a default (highest)
+                    # without sending, so the device keeps its remembered level.
+                    default_pct = (
+                        self._levels[-1][0]
+                        if self._dim_mode == DIM_PRESET
+                        else self._steps[-1]
+                    )
+                    self._attr_brightness = _pct_to_brightness(default_pct)
+
+            self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Send the off command and optimistically mark the light off."""
-        if self._attr_is_on:
-            await async_send_code(
-                self.hass, self._remote_entity_id, self._off_command, self._device
-            )
-        self._attr_is_on = False
-        self.async_write_ha_state()
+        async with self._lock:
+            if self._attr_is_on:
+                await async_send_code(
+                    self.hass, self._remote_entity_id, self._off_command, self._device
+                )
+            self._attr_is_on = False
+            self.async_write_ha_state()
